@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>재고 QR</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; font-family: -apple-system, "Malgun Gothic", sans-serif; background: #f4f5f7; color: #1a1a1a; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 8px 0 16px; }
+  .row { display: flex; gap: 8px; }
+  input { flex: 1; font-size: 22px; padding: 14px; border: 2px solid #c9ced6; border-radius: 12px; text-transform: uppercase; }
+  button { font-size: 18px; font-weight: 700; padding: 14px 18px; border: 0; border-radius: 12px; background: #2d6cdf; color: #fff; }
+  button.ghost { background: #e7ebf2; color: #2d3b53; }
+  .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .btns button { flex: 1; }
+  #reader { margin-top: 14px; border-radius: 12px; overflow: hidden; }
+  .card { margin-top: 16px; background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+  .code { font-size: 30px; font-weight: 800; }
+  .db { display: inline-block; font-size: 13px; font-weight: 700; color: #fff; background: #2d6cdf; padding: 3px 10px; border-radius: 999px; margin-left: 8px; vertical-align: middle; }
+  .name { font-size: 22px; margin: 8px 0 14px; }
+  .spec { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eef0f3; font-size: 17px; }
+  .spec b { color: #5b6472; font-weight: 600; }
+  .stock { display: flex; gap: 10px; margin-top: 14px; }
+  .stock .box { flex: 1; text-align: center; background: #f4f6f9; border-radius: 12px; padding: 12px; }
+  .stock .num { font-size: 28px; font-weight: 800; }
+  .stock .lab { font-size: 13px; color: #6b7280; }
+  .order { margin-top: 12px; font-size: 18px; font-weight: 700; text-align: center; }
+  .err { margin-top: 16px; background: #fde8e8; color: #b42318; border-radius: 12px; padding: 16px; font-size: 17px; }
+  .muted { color: #8a8f98; font-size: 13px; margin-top: 6px; }
+  .ok { color: #157347; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📦 재고 QR — 조회 (1차)</h1>
+
+  <div class="row">
+    <input id="code" placeholder="ZR-1" autocomplete="off" inputmode="text"
+           onkeydown="if(event.key==='Enter')doLookup()">
+    <button onclick="doLookup()">조회</button>
+  </div>
+  <div class="btns">
+    <button class="ghost" id="camBtn" onclick="toggleCam()">📷 카메라 스캔</button>
+  </div>
+  <div id="reader"></div>
+  <div class="muted">코드를 입력하거나(예: ZR-1, HW-19, MF-1) 카메라로 QR을 스캔하세요.</div>
+
+  <div id="result"></div>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+  var GAS = 'https://script.google.com/macros/s/AKfycbyq7xJO7lGJXLNGrASOMQQ2sHmI2j7J6qANPcCSmiJkLpLY90heLTJLtXaChbUAmyO-/exec';
+  var qr = null, camOn = false;
+
+  function doLookup() {
+    var code = document.getElementById('code').value.trim();
+    if (!code) return;
+    render({ loading: true });
+    fetch(GAS + '?action=lookup&code=' + encodeURIComponent(code))
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message }); });
+  }
+
+  function render(r) {
+    var el = document.getElementById('result');
+    if (r && r.loading) { el.innerHTML = '<div class="card">조회 중…</div>'; return; }
+    if (!r || !r.ok) { el.innerHTML = '<div class="err">⚠️ ' + (r ? r.msg : '응답 없음') + '</div>'; return; }
+    var specs = '';
+    for (var k in r.specs) specs += '<div class="spec"><b>' + k + '</b><span>' + fmt(r.specs[k]) + '</span></div>';
+    var order = r.order ? '<div class="order ' + (String(r.order).indexOf('🔴') >= 0 ? '' : 'ok') + '">' + r.order + '</div>' : '';
+    el.innerHTML =
+      '<div class="card">' +
+        '<div><span class="code">' + r.code + '</span><span class="db">' + r.db + '</span></div>' +
+        '<div class="name">' + (r.name || '') + '</div>' +
+        specs +
+        '<div class="stock">' +
+          '<div class="box"><div class="num">' + nz(r.current) + '</div><div class="lab">현재재고</div></div>' +
+          '<div class="box"><div class="num">' + nz(r.safety) + '</div><div class="lab">안전재고</div></div>' +
+        '</div>' + order +
+      '</div>';
+  }
+  function fmt(v){ return (v===''||v==null)?'-':v; }
+  function nz(v){ return (v==null)?'-':v; }
+
+  function toggleCam() {
+    if (camOn) { stopCam(); return; }
+    if (typeof Html5Qrcode === 'undefined') { alert('스캐너 로드 실패 — 입력창을 쓰세요.'); return; }
+    qr = new Html5Qrcode('reader');
+    qr.start({ facingMode: 'environment' }, { fps: 10, qrbox: 220 },
+      function (text) {
+        document.getElementById('code').value = text;
+        stopCam();
+        doLookup();
+      }, function () {})
+      .then(function () { camOn = true; document.getElementById('camBtn').textContent = '⏹ 스캔 중지'; })
+      .catch(function (e) { alert('카메라를 열 수 없습니다: ' + e + '\n입력창으로 조회하세요.'); });
+  }
+  function stopCam() {
+    if (qr) { qr.stop().then(function(){ qr.clear(); }).catch(function(){}); }
+    camOn = false; document.getElementById('camBtn').textContent = '📷 카메라 스캔';
+  }
+</script>
+</body>
+</html>
