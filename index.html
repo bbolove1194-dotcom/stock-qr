@@ -30,11 +30,17 @@
   .err { margin-top: 16px; background: #fde8e8; color: #b42318; border-radius: 12px; padding: 16px; font-size: 17px; }
   .muted { color: #8a8f98; font-size: 13px; margin-top: 6px; }
   .ok { color: #157347; }
+  .done { background: #e6f6ec; color: #157347; border-radius: 12px; padding: 12px; font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 14px; }
+  .qtyrow { display: flex; gap: 8px; margin-top: 16px; align-items: stretch; }
+  .qtyrow input { flex: 0 0 70px; text-align: center; font-size: 22px; }
+  .qtyrow button { flex: 1; font-size: 19px; }
+  .minus { background: #c2410c; }
+  .plus { background: #157347; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>📦 재고 QR — 조회 (1차)</h1>
+  <h1>📦 재고 QR — 수량 관리</h1>
 
   <div class="row">
     <input id="code" placeholder="ZR-1" autocomplete="off" inputmode="text"
@@ -45,7 +51,7 @@
     <button class="ghost" id="camBtn" onclick="toggleCam()">📷 카메라 스캔</button>
   </div>
   <div id="reader"></div>
-  <div class="muted">코드를 입력하거나(예: ZR-1, HW-19, MF-1) 카메라로 QR을 스캔하세요.</div>
+  <div class="muted">코드 입력/스캔 → 조회 → 입고(+)·사용(−) 으로 재고 반영.</div>
 
   <div id="result"></div>
 </div>
@@ -53,7 +59,7 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
   var GAS = 'https://script.google.com/macros/s/AKfycbyq7xJO7lGJXLNGrASOMQQ2sHmI2j7J6qANPcCSmiJkLpLY90heLTJLtXaChbUAmyO-/exec';
-  var qr = null, camOn = false;
+  var qr = null, camOn = false, lastCode = '';
 
   function doLookup() {
     var code = document.getElementById('code').value.trim();
@@ -65,15 +71,30 @@
       .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message }); });
   }
 
+  function doAdjust(sign) {
+    var q = parseInt(document.getElementById('qty').value, 10);
+    if (!q || q < 1) q = 1;
+    var delta = sign * q;
+    render({ loading: true, msg: '반영 중…' });
+    fetch(GAS + '?action=adjust&code=' + encodeURIComponent(lastCode) + '&delta=' + delta)
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message + ' — 재시도하세요' }); });
+  }
+
   function render(r) {
     var el = document.getElementById('result');
-    if (r && r.loading) { el.innerHTML = '<div class="card">조회 중…</div>'; return; }
+    if (r && r.loading) { el.innerHTML = '<div class="card">' + (r.msg || '조회 중…') + '</div>'; return; }
     if (!r || !r.ok) { el.innerHTML = '<div class="err">⚠️ ' + (r ? r.msg : '응답 없음') + '</div>'; return; }
+    lastCode = r.code;
+    var done = r.applied
+      ? '<div class="done">✓ 반영 완료 (' + (r.delta > 0 ? '입고 +' + r.delta : '사용 ' + r.delta) + ' → 현재 ' + nz(r.current) + '개)</div>'
+      : '';
     var specs = '';
     for (var k in r.specs) specs += '<div class="spec"><b>' + k + '</b><span>' + fmt(r.specs[k]) + '</span></div>';
     var order = r.order ? '<div class="order ' + (String(r.order).indexOf('🔴') >= 0 ? '' : 'ok') + '">' + r.order + '</div>' : '';
     el.innerHTML =
-      '<div class="card">' +
+      '<div class="card">' + done +
         '<div><span class="code">' + r.code + '</span><span class="db">' + r.db + '</span></div>' +
         '<div class="name">' + (r.name || '') + '</div>' +
         specs +
@@ -81,6 +102,11 @@
           '<div class="box"><div class="num">' + nz(r.current) + '</div><div class="lab">현재재고</div></div>' +
           '<div class="box"><div class="num">' + nz(r.safety) + '</div><div class="lab">안전재고</div></div>' +
         '</div>' + order +
+        '<div class="qtyrow">' +
+          '<button class="minus" onclick="doAdjust(-1)">− 사용</button>' +
+          '<input id="qty" type="number" value="1" min="1" inputmode="numeric">' +
+          '<button class="plus" onclick="doAdjust(1)">+ 입고</button>' +
+        '</div>' +
       '</div>';
   }
   function fmt(v){ return (v===''||v==null)?'-':v; }
