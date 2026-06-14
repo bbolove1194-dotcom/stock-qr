@@ -51,7 +51,7 @@
     <button class="ghost" id="camBtn" onclick="toggleCam()">📷 카메라 스캔</button>
   </div>
   <div id="reader"></div>
-  <div class="muted">코드 입력/스캔 → 조회 → 입고(+)·사용(−) 으로 재고 반영.</div>
+  <div class="muted">코드 입력/스캔 → 조회 → 입고(+)·사용(−). 미개봉 디스크는 수축률 입력 후 🔓 개봉.</div>
 
   <div id="result"></div>
 </div>
@@ -82,11 +82,40 @@
       .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message + ' — 재시도하세요' }); });
   }
 
+  function doOpen() {
+    var sh = document.getElementById('shrink').value.trim();
+    if (!sh) { alert('수축률을 입력하세요 (예: 1.2332)'); return; }
+    render({ loading: true, msg: '개봉 처리 중…' });
+    fetch(GAS + '?action=open&code=' + encodeURIComponent(lastCode) + '&shrink=' + encodeURIComponent(sh))
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message + ' — 재시도하세요' }); });
+  }
+
+  function renderOpened(r) {
+    var el = document.getElementById('result');
+    el.innerHTML =
+      '<div class="card">' +
+        '<div class="done">🔓 개봉 완료 · 미개봉 ' + nz(r.remain) + '개 남음</div>' +
+        '<div class="muted">아래 일련번호로 블럭에 라벨을 붙이세요</div>' +
+        '<div class="code" style="font-size:23px;margin-top:6px;word-break:break-all">' + r.serial + '</div>' +
+        '<div class="spec"><b>블럭</b><span>' + r.block + '</span></div>' +
+        '<div class="spec"><b>두께 / 쉐이드</b><span>' + r.thick + 'T / ' + r.shade + '</span></div>' +
+        '<div class="spec"><b>수축률</b><span>' + r.shrink + '</span></div>' +
+        '<div class="btns" style="margin-top:14px">' +
+          '<button class="ghost" onclick="reLookup()">← 같은 디스크 다시 조회</button>' +
+        '</div>' +
+      '</div>';
+  }
+  function reLookup() { document.getElementById('code').value = lastCode; doLookup(); }
+
   function render(r) {
     var el = document.getElementById('result');
     if (r && r.loading) { el.innerHTML = '<div class="card">' + (r.msg || '조회 중…') + '</div>'; return; }
     if (!r || !r.ok) { el.innerHTML = '<div class="err">⚠️ ' + (r ? r.msg : '응답 없음') + '</div>'; return; }
+    if (r.serial) { lastCode = r.code; renderOpened(r); return; }
     lastCode = r.code;
+    var isDiskUnopened = (r.db === '디스크' && r.specs && r.specs['구분'] === '미개봉재고');
     var done = r.applied
       ? '<div class="done">✓ 반영 완료 (' + (r.delta > 0 ? '입고 +' + r.delta : '사용 ' + r.delta) + ' → 현재 ' + nz(r.current) + '개)</div>'
       : '';
@@ -107,6 +136,12 @@
           '<input id="qty" type="number" value="1" min="1" inputmode="numeric">' +
           '<button class="plus" onclick="doAdjust(1)">+ 입고</button>' +
         '</div>' +
+        (isDiskUnopened ?
+          '<div class="muted" style="margin-top:14px">🔓 디스크 개봉 — 수축률 입력 후 개봉(미개봉 −1, 사용블럭 자동생성)</div>' +
+          '<div class="qtyrow">' +
+            '<input id="shrink" placeholder="수축률 예: 1.2332" inputmode="decimal" style="flex:1;text-transform:none">' +
+            '<button class="plus" style="background:#7c3aed" onclick="doOpen()">🔓 개봉</button>' +
+          '</div>' : '') +
       '</div>';
   }
   function fmt(v){ return (v===''||v==null)?'-':v; }
