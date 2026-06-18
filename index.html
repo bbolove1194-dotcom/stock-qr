@@ -170,8 +170,10 @@
   function doOpen() {
     var sh = document.getElementById('shrink').value.trim();
     if (!sh) { alert('수축률을 입력하세요 (예: 1.2332)'); return; }
+    var eq = (document.getElementById('equip') || {}).value || '';
+    if (!eq) { alert('장비를 선택하세요'); return; }
     render({ loading: true, msg: '개봉 처리 중…' });
-    fetch(GAS + '?action=open&code=' + encodeURIComponent(lastCode) + '&shrink=' + encodeURIComponent(sh))
+    fetch(GAS + '?action=open&code=' + encodeURIComponent(lastCode) + '&shrink=' + encodeURIComponent(sh) + '&equip=' + encodeURIComponent(eq))
       .then(function (r) { return r.json(); })
       .then(render)
       .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message + ' — 재시도하세요' }); });
@@ -187,6 +189,7 @@
         '<div class="spec"><b>블럭</b><span>' + r.block + '</span></div>' +
         '<div class="spec"><b>두께 / 쉐이드</b><span>' + r.thick + 'T / ' + r.shade + '</span></div>' +
         '<div class="spec"><b>수축률</b><span>' + r.shrink + '</span></div>' +
+        '<div class="spec"><b>장비</b><span>' + fmt(r.equip) + (r.equipAbbr ? ' (' + r.equipAbbr + ')' : '') + '</span></div>' +
         '<div class="btns" style="margin-top:14px">' +
           '<button class="ghost" onclick="reLookup()">← 같은 디스크 다시 조회</button>' +
         '</div>' +
@@ -222,7 +225,16 @@
           '<button class="plus" onclick="doAdjust(1)">+ 입고</button>' +
         '</div>' +
         (isDiskUnopened ?
-          '<div class="muted" style="margin-top:14px">🔓 디스크 개봉 — 수축률 입력 후 개봉(미개봉 −1, 사용블럭 자동생성)</div>' +
+          '<div class="muted" style="margin-top:14px">🔓 디스크 개봉 — 장비 선택 + 수축률 입력 후 개봉(미개봉 −1, 사용블럭 자동생성)</div>' +
+          '<div class="qtyrow">' +
+            '<select id="equip" style="flex:1;font-size:18px;padding:14px;border:2px solid #c9ced6;border-radius:12px;background:#fff">' +
+              '<option value="">장비 선택…</option>' +
+              '<option value="시로나">시로나 (Si)</option>' +
+              '<option value="아름 500L">아름 500L</option>' +
+              '<option value="아름 A5">아름 A5</option>' +
+              '<option value="250i">250i</option>' +
+            '</select>' +
+          '</div>' +
           '<div class="qtyrow">' +
             '<input id="shrink" placeholder="수축률 예: 1.2332" inputmode="decimal" style="flex:1;text-transform:none">' +
             '<button class="plus" style="background:#7c3aed" onclick="doOpen()">🔓 개봉</button>' +
@@ -253,11 +265,60 @@
       else { document.getElementById('code').value = code; doLookup(); }
     } else if (hasPageId(text)) {
       enterCase(text);
+    } else if (extractGtin(text)) {
+      handleGtin(extractGtin(text));
     } else {
-      render({ ok: false, msg: '재고코드(예 MF-1)·케이스 QR·툴 QR(TL-)을 입력/스캔하세요' });
+      render({ ok: false, msg: '재고코드(예 MF-1)·케이스 QR·툴 QR(TL-)·포장지 바코드를 인식 못했습니다' });
     }
   }
   function submitInput() { handleText(document.getElementById('code').value); }
+
+  /* ===== 포장지 GTIN(바코드) ===== */
+  function extractGtin(t) {
+    var m = String(t || '').match(/01(\d{14})/);   // GS1: (01)+GTIN14
+    return m ? m[1] : null;
+  }
+  function handleGtin(gtin) {
+    document.getElementById('result').innerHTML = '<div class="card">포장지 조회 중… (GTIN ' + gtin + ')</div>';
+    fetch(GAS + '?action=gtin&gtin=' + encodeURIComponent(gtin))
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r || !r.ok) { afterGtinErr('조회 오류: ' + (r ? r.msg : '응답 없음')); return; }
+        if (r.found) {                       // 등록된 포장지 → 그 재고코드로 검수
+          if (VCASE) doVerify(r.code);
+          else { document.getElementById('code').value = r.code; doLookup(); }
+        } else {                             // 처음 보는 포장지
+          if (VCASE) promptGtinRegister(gtin);
+          else afterGtinErr('등록 안 된 포장지입니다. 검수는 케이스 QR 먼저 스캔하세요.');
+        }
+      })
+      .catch(function (e) { afterGtinErr('통신 오류: ' + e.message); });
+  }
+  function afterGtinErr(msg) {
+    if (VCASE) drawCase('<div class="warnbanner">' + msg + '</div>');
+    else render({ ok: false, msg: msg });
+  }
+  function promptGtinRegister(gtin) {
+    var abut = (VCASE && VCASE.abut) || [];
+    var btns = abut.map(function (a) {
+      return '<button class="verify" style="width:100%;margin:5px 0" onclick="regGtin(\'' + gtin + '\',\'' + a.code + '\')">이 포장 = ' + (a.code || '?') + ' (' + (a.name || '') + ')</button>';
+    }).join('');
+    document.getElementById('result').innerHTML =
+      '<div class="card"><div class="warnbanner">처음 보는 포장지입니다 (GTIN ' + gtin + ')</div>' +
+      '<div class="muted" style="margin:8px 0">포장지 제품명을 보고, 이 케이스 어버트 중 무엇인지 골라 등록하세요:</div>' +
+      (btns || '<div class="muted">이 케이스에 지정된 어버트가 없습니다</div>') +
+      '<div class="btns" style="margin-top:8px"><button class="ghost" onclick="drawCase(\'\')">취소</button></div></div>';
+  }
+  function regGtin(gtin, code) {
+    document.getElementById('result').innerHTML = '<div class="card">등록 중…</div>';
+    fetch(GAS + '?action=gtinreg&gtin=' + encodeURIComponent(gtin) + '&code=' + encodeURIComponent(code))
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r || !r.ok) { afterGtinErr('등록 실패: ' + (r ? r.msg : '응답 없음')); return; }
+        doVerify(code);                       // 등록 후 바로 검수(통과될 것)
+      })
+      .catch(function (e) { afterGtinErr('통신 오류: ' + e.message); });
+  }
 
   function enterCase(text) {
     stopCam();
@@ -511,17 +572,45 @@
   }
   function setCamBtn(t) { var b = document.getElementById('camBtn'); if (b) b.textContent = t; }
 
+  var bdStream = null, bdVideo = null, bdDetector = null;
+
   function startCam() {
     if (camOn) return;
+    // BarcodeDetector 지원(안드로이드 크롬) → QR+DataMatrix(포장지) 둘 다 읽음. 없으면 html5-qrcode(QR전용) 폴백.
+    if ('BarcodeDetector' in window) startCamBD();
+    else startCamHtml5();
+  }
+  function startCamHtml5() {
     if (typeof Html5Qrcode === 'undefined') { alert('스캐너 로드 실패 — 입력창을 쓰세요.'); return; }
     qr = new Html5Qrcode('reader');
     qr.start({ facingMode: 'environment' }, { fps: 10, qrbox: 220 }, onScan, function () {})
       .then(function () { camOn = true; setCamBtn('⏹ 스캔 중지'); })
       .catch(function (e) { alert('카메라를 열 수 없습니다: ' + e + '\n입력창으로 조회하세요.'); });
   }
+  function startCamBD() {
+    var reader = document.getElementById('reader');
+    reader.innerHTML = '<video id="bdvid" playsinline muted style="width:100%;border-radius:12px;background:#000"></video>';
+    bdVideo = document.getElementById('bdvid');
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+      .then(function (stream) {
+        bdStream = stream; bdVideo.srcObject = stream; bdVideo.play();
+        bdDetector = new BarcodeDetector({ formats: ['qr_code', 'data_matrix', 'code_128', 'ean_13'] });
+        camOn = true; setCamBtn('⏹ 스캔 중지'); bdLoop();
+      })
+      .catch(function () { startCamHtml5(); });   // 카메라 실패 시 폴백
+  }
+  function bdLoop() {
+    if (!camOn || !bdDetector || !bdVideo) return;
+    bdDetector.detect(bdVideo).then(function (codes) {
+      if (codes && codes.length) { onScan(codes[0].rawValue); return; }   // onScan이 stopCam 호출
+      if (camOn) requestAnimationFrame(bdLoop);
+    }).catch(function () { if (camOn) requestAnimationFrame(bdLoop); });
+  }
   function toggleCam() { if (camOn) stopCam(); else startCam(); }
   function stopCam() {
-    if (qr) { qr.stop().then(function(){ qr.clear(); }).catch(function(){}); }
+    // camOn 가드: 이미 멈춘 상태에서 또 stop()하면 html5-qrcode가 깨져 카메라가 얼어붙음. 실제 정지는 한 번만.
+    if (qr && camOn) { qr.stop().then(function(){ qr.clear(); }).catch(function(){}); }
+    if (bdStream) { bdStream.getTracks().forEach(function (t) { t.stop(); }); bdStream = null; bdDetector = null; bdVideo = null; }
     camOn = false; setCamBtn('📷 카메라 스캔');
   }
 </script>
