@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>DataMatrix 테스트</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; font-family:-apple-system,"Malgun Gothic",sans-serif; background:#0f172a; color:#e2e8f0; }
+  .wrap { max-width:520px; margin:0 auto; padding:14px; }
+  h1 { font-size:18px; margin:6px 0 10px; }
+  #video { width:100%; border-radius:14px; background:#000; }
+  .row { display:flex; gap:8px; margin-top:10px; }
+  button { flex:1; font-size:16px; font-weight:700; padding:13px; border:0; border-radius:12px; background:#2d6cdf; color:#fff; }
+  button.ghost { background:#334155; }
+  .res { margin-top:12px; background:#1e293b; border-radius:12px; padding:14px; font-size:15px; word-break:break-all; }
+  .ok { color:#4ade80; font-weight:800; font-size:20px; }
+  .gtin { color:#fbbf24; font-weight:800; font-size:22px; margin-top:6px; }
+  .muted { color:#94a3b8; font-size:13px; margin-top:8px; line-height:1.5; }
+  .hit { animation: flash .5s; }
+  @keyframes flash { from{background:#15803d} to{background:#1e293b} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔬 포장지 바코드(DataMatrix) 읽기 테스트</h1>
+  <video id="video" playsinline muted></video>
+  <div class="row">
+    <button id="torch" class="ghost" onclick="toggleTorch()">🔦 플래시</button>
+    <button onclick="location.reload()">↻ 다시</button>
+  </div>
+  <div id="res" class="res">카메라 준비 중…</div>
+  <div class="muted">
+    • 포장지의 <b>작은 네모격자 코드</b>를 화면 가운데에, <b>가까이</b> 비추세요.<br>
+    • 은박 <b>반사가 안 생기게</b> 각도를 살짝 기울이세요.<br>
+    • 읽히면 위에 <span style="color:#fbbf24">노란 GTIN 숫자</span>가 뜹니다.<br>
+    • 한 번 읽히면 = 성공! (QR도 같이 테스트됨)
+  </div>
+</div>
+
+<script>
+var video = document.getElementById('video');
+var resEl = document.getElementById('res');
+var track = null, torchOn = false, detector = null, scanning = false;
+
+function show(html, hit){ resEl.innerHTML = html; if(hit){ resEl.classList.remove('hit'); void resEl.offsetWidth; resEl.classList.add('hit'); } }
+
+function parseGS1(raw){
+  // GS1 (01)GTIN(10)LOT(11)YYMMDD … FNC1(\x1d) 구분. 앞이 01이면 GTIN 14자리.
+  var s = raw.replace(/^\]d2|^\]Q3|^\]C1/,''); // 심볼로지 식별자 제거
+  var m = s.match(/01(\d{14})/);
+  return m ? m[1] : null;
+}
+
+async function start(){
+  if (!('BarcodeDetector' in window)) {
+    show('⚠️ 이 브라우저는 BarcodeDetector 미지원입니다.<br>안드로이드 <b>크롬</b>에서 열어주세요. (그래도 안 되면 사진+AI로)');
+    return;
+  }
+  var formats;
+  try { formats = await BarcodeDetector.getSupportedFormats(); } catch(e){ formats = []; }
+  var want = ['data_matrix','qr_code','code_128','ean_13','itf','codabar'].filter(function(f){ return formats.indexOf(f)>=0; });
+  if (want.indexOf('data_matrix') < 0) {
+    show('⚠️ 이 폰은 <b>DataMatrix 포맷 미지원</b>입니다 (지원: '+formats.join(', ')+').<br>→ 사진+AI 방식으로 가야 합니다.');
+  }
+  detector = new BarcodeDetector({ formats: want.length?want:['qr_code'] });
+
+  try {
+    var stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'environment', width:{ideal:1920}, height:{ideal:1080} }, audio:false
+    });
+    video.srcObject = stream; await video.play();
+    track = stream.getVideoTracks()[0];
+    show('📷 카메라 켜짐 — 코드를 가까이 비추세요 ('+(want.join(', ')||'qr')+' 지원)');
+    scanning = true; loop();
+  } catch(e){ show('카메라 열기 실패: '+e.message+'<br>HTTPS(깃허브 페이지)에서 열어야 합니다.'); }
+}
+
+async function loop(){
+  if (!scanning) return;
+  try {
+    var codes = await detector.detect(video);
+    if (codes && codes.length) {
+      var c = codes[0];
+      var gtin = parseGS1(c.rawValue);
+      show('<div class="ok">✅ 읽힘! ['+c.format+']</div>' +
+           (gtin ? '<div class="gtin">GTIN: '+gtin+'</div>' : '') +
+           '<div class="muted" style="margin-top:8px">원본: '+c.rawValue+'</div>', true);
+    }
+  } catch(e){}
+  requestAnimationFrame(loop);
+}
+
+async function toggleTorch(){
+  if (!track) return;
+  try { torchOn = !torchOn; await track.applyConstraints({ advanced:[{ torch: torchOn }] });
+        document.getElementById('torch').textContent = torchOn?'🔦 끄기':'🔦 플래시'; }
+  catch(e){ show(resEl.innerHTML + '<div class="muted">(이 폰은 플래시 제어 미지원)</div>'); }
+}
+
+start();
+</script>
+</body>
+</html>
