@@ -390,8 +390,8 @@
 
   function doVerify(code) {
     var prefix = code.slice(0, 2).toUpperCase();
-    if (prefix === 'ZR') { drawCase('<div class="warnbanner">ℹ️ 디스크 검수는 이 버전에서 미지원</div>'); return; }
-    var act = prefix === 'MF' ? 'verifymf' : 'verifyhw';
+    var act = prefix === 'MF' ? 'verifymf' : prefix === 'HW' ? 'verifyhw' : prefix === 'ZR' ? 'verifyzr' : null;
+    if (!act) { drawCase('<div class="warnbanner">인식 못한 자재 코드: ' + code + '</div>'); return; }
     stopCam();
     document.getElementById('result').innerHTML = '<div class="card">검수 중… (' + code + ')</div>';
     fetch(GAS + '?action=' + act + '&caseId=' + encodeURIComponent(VCASE.caseId) + '&code=' + encodeURIComponent(code))
@@ -409,11 +409,13 @@
     if (!r) { drawCase('<div class="warnbanner">응답 없음 — 다시 스캔</div>'); return; }
 
     if (r.ok && r.matched) {                       // ✅ 일치
+      if (r.mode === 'ZR') { drawCase('<div class="done">✅ 블럭 연결됨 — ' + r.block.code + ' (' + r.block.serial + ') → 밀링행 ' + r.linkedCount + '개</div>'); return; }
       bumpScanned(r);
       drawCase('<div class="done">✅ 일치 — ' + r.code + ' ' + (r.name || '') + ' · 현재 ' + nz(r.current) + '개</div>' + warnsHtml(r.warns));
       return;
     }
     if (r.ok && r.forced) {                         // 강제 진행됨
+      if (r.mode === 'ZR') { drawCase('<div class="done" style="background:#fef3c7;color:#92400e">⚠️→ 강제 연결됨 — ' + r.block.code + ' (' + r.block.serial + ')</div><div class="muted">쉐이드/두께 불일치 · 기록됨</div>'); return; }
       bumpScanned(r);
       drawCase('<div class="done" style="background:#fef3c7;color:#92400e">⚠️→ 강제 진행됨 — ' + r.code + ' · 현재 ' + nz(r.current) + '개</div>' +
         '<div class="muted">사유 기록됨 · ' + (r.reason || '') + '</div>' + warnsHtml(r.warns));
@@ -436,6 +438,12 @@
     if (r.mode === 'MF') {
       detail = '<div class="spec"><b>스캔</b><span>' + r.scanned.code + ' ' + (r.scanned.name || '') + '</span></div>' +
         (r.requiredCodes && r.requiredCodes.length ? '<div class="spec"><b>이 케이스 지정</b><span>' + r.requiredCodes.join(', ') + '</span></div>' : '');
+    } else if (r.mode === 'ZR') {
+      detail = '<div class="spec"><b>스캔 블럭</b><span>' + r.block.code + ' (' + r.block.serial + ')</span></div>' +
+        '<div class="spec"><b>블럭 쉐이드/두께</b><span>' + fmt(r.block.shade) + ' / ' + fmt(r.block.thick) + 'T</span></div>';
+      (r.mills || []).forEach(function (m) {
+        detail += '<div class="spec" style="color:#b42318"><b>밀링행 요구</b><span>' + fmt(m.shade) + ' / ' + fmt(m.thick) + 'T</span></div>';
+      });
     } else {
       detail = '<div class="spec"><b>스캔 환봉</b><span>' + r.scanned.code + '</span></div>';
       (r.diff || []).forEach(function (d) {
@@ -456,7 +464,7 @@
   function forceVerify(code, mode) {
     var reason = prompt('강제 진행 사유를 입력하세요 (필수):', '');
     if (!reason || !reason.trim()) { alert('사유를 입력해야 강제 진행됩니다.'); return; }
-    var act = mode === 'MF' ? 'verifymf' : 'verifyhw';
+    var act = mode === 'MF' ? 'verifymf' : mode === 'ZR' ? 'verifyzr' : 'verifyhw';
     document.getElementById('result').innerHTML = '<div class="card">강제 진행 중…</div>';
     fetch(GAS + '?action=' + act + '&caseId=' + encodeURIComponent(VCASE.caseId) +
           '&code=' + encodeURIComponent(code) + '&force=1&reason=' + encodeURIComponent(reason.trim()))
