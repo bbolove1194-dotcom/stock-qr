@@ -78,13 +78,14 @@
     var m = new RegExp('[?&]' + n + '=([^&#]+)').exec(location.search);
     return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null;
   }
+  function box3(v) { return ('000' + String(v)).slice(-3); }   // 박스번호 3자리 표시 (78 -> 078)
 
   // ?box=N 이면 박스 배정 모드, ?tool=1 이면 툴 교체 모드로 진입
   window.addEventListener('load', function () {
     var b = getParam('box');
     if (b !== null && b !== '') {
       BOX = b; scanMode = 'assign';
-      document.getElementById('title').textContent = '📦 박스 ' + b + ' 배정';
+      document.getElementById('title').textContent = '📦 박스 ' + box3(b) + ' 배정';
       document.getElementById('normalUI').style.display = 'none';
       renderBoxPrompt();
       startCam();
@@ -96,7 +97,7 @@
   function renderBoxPrompt() {
     document.getElementById('boxPanel').innerHTML =
       '<div class="card">' +
-        '<div class="done" style="background:#eef2ff;color:#3730a3">박스 ' + BOX + ' 인식됨</div>' +
+        '<div class="done" style="background:#eef2ff;color:#3730a3">박스 ' + box3(BOX) + ' 인식됨</div>' +
         '<div style="font-size:19px;margin:8px 0 4px">📷 <b>의뢰서 QR</b>을 찍으세요</div>' +
         '<div class="muted">카메라가 자동으로 켜집니다. 안 켜지면 아래 버튼을 누르세요.</div>' +
         '<div class="btns" style="margin-top:10px">' +
@@ -111,7 +112,7 @@
     var url = GAS + '?action=assignbox&box=' + encodeURIComponent(BOX) + '&code=' + encodeURIComponent(text);
     if (force) url += '&force=1';
     document.getElementById('boxPanel').innerHTML = '';
-    document.getElementById('result').innerHTML = '<div class="card">박스 ' + BOX + ' 배정 중…</div>';
+    document.getElementById('result').innerHTML = '<div class="card">박스 ' + box3(BOX) + ' 배정 중…</div>';
     fetch(url).then(function (r) { return r.json(); }).then(renderAssign)
       .catch(function (e) { renderAssignErr('통신 오류: ' + e.message); });
   }
@@ -123,16 +124,21 @@
         '<div class="err">⚠️ ' + r.msg + '</div>' +
         '<div class="btns" style="margin-top:12px">' +
           '<button class="ghost" onclick="boxRescan()">📷 다시 스캔</button>' +
-          '<button class="minus" onclick="doAssign(lastScan, 1)">그래도 박스 ' + BOX + ' 배정</button>' +
+          '<button class="minus" onclick="doAssign(lastScan, 1)">그래도 박스 ' + box3(BOX) + ' 배정</button>' +
         '</div></div>';
       return;
     }
     if (!r || !r.ok) { renderAssignErr(r ? r.msg : '응답 없음'); return; }
     var prevTxt = (r.prev != null && String(r.prev) !== String(r.box))
-      ? '<div class="muted" style="margin-top:6px">기존 박스 ' + r.prev + '번 → ' + r.box + '번으로 변경</div>' : '';
+      ? '<div class="muted" style="margin-top:6px">기존 박스 ' + box3(r.prev) + ' → ' + box3(r.box) + '로 변경</div>' : '';
+    var i = r.info || {};
+    function row(lab, val) { return val ? '<div class="spec"><b>' + lab + '</b><span>' + val + '</span></div>' : ''; }
+    var big = i.patient || r.caseName || '케이스';
+    var specs = row('치과', i.clinic) + row('보철', i.prosth) + row('완성일', i.due);
     el.innerHTML = '<div class="card">' +
-      '<div class="done">✓ 박스 ' + r.box + ' 배정 완료</div>' +
-      '<div class="name">' + (r.caseName || '케이스') + '</div>' + prevTxt +
+      '<div class="done">✓ 박스 ' + box3(r.box) + ' 배정 완료' + (r.count > 1 ? ' · ' + r.count + '건' : '') + '</div>' +
+      '<div class="name">' + big + '</div>' +
+      specs + prevTxt +
       '<div class="btns" style="margin-top:14px">' +
         '<button class="ghost" onclick="boxRescan()">📷 다른 의뢰서 다시 스캔</button>' +
       '</div></div>';
