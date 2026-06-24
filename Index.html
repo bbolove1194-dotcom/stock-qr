@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>재고 QR</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  :root{
+    --primary:#4a154b; --primary-press:#611f69; --on-primary:#fff;
+    --ink:#1d1d1d; --ink-mute:#696969; --link:#1264a3;
+    --canvas:#fff; --cream:#f4ede4; --lavender:#f9f0ff;
+    --hairline:#e6e6e6; --error:#cc4117; --success:#007a5a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin:0; color:var(--ink); min-height:100vh;
+    font-family:'Inter', system-ui, -apple-system, "Malgun Gothic", sans-serif;
+    background:
+      radial-gradient(900px 520px at 12% -8%, #fff0e6 0%, rgba(255,240,230,0) 60%),
+      radial-gradient(820px 520px at 112% -4%, #efe0ff 0%, rgba(239,224,255,0) 55%),
+      radial-gradient(760px 620px at 50% 118%, #e6f3ea 0%, rgba(230,243,234,0) 55%),
+      #f9f0ff;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 18px 16px 44px; }
+  h1 { font-size:25px; font-weight:800; letter-spacing:-.4px; color:var(--primary); margin:10px 0 18px; }
+  .row { display: flex; gap: 8px; }
+  .row > button { flex: 0 0 auto; }
+  input, select {
+    font-family:inherit; font-size:20px; padding:13px 14px;
+    border:1.5px solid var(--hairline); border-radius:12px; background:var(--canvas); color:var(--ink);
+  }
+  input { flex:1; min-width:0; text-transform:uppercase; }
+  input:focus, select:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(74,21,75,.13); }
+  button {
+    font-family:inherit; font-size:16px; font-weight:700; letter-spacing:.2px;
+    padding:13px 24px; border:0; border-radius:90px; white-space:nowrap;
+    background:var(--primary); color:var(--on-primary); cursor:pointer; transition:background .12s, transform .04s;
+  }
+  button:active { background:var(--primary-press); transform:translateY(1px); }
+  button.ghost { background:var(--lavender); color:var(--primary); }
+  .btns { display: flex; gap: 8px; margin-top: 10px; }
+  .btns button { flex: 1; }
+  #reader { margin-top: 14px; border-radius: 14px; overflow: hidden; }
+  .card {
+    margin-top:16px; background:var(--canvas); border:1px solid var(--hairline);
+    border-radius:18px; padding:20px; box-shadow:0 6px 22px rgba(74,21,75,.07);
+  }
+  .code { font-size:30px; font-weight:800; letter-spacing:-.6px; color:var(--primary); }
+  .db {
+    display:inline-block; font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase;
+    color:var(--on-primary); background:var(--primary); padding:4px 12px; border-radius:90px; margin-left:8px; vertical-align:middle;
+  }
+  .name { font-size:20px; font-weight:600; margin:10px 0 14px; }
+  .spec { display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--hairline); font-size:16px; }
+  .spec b { color:var(--ink-mute); font-weight:600; }
+  .stock { display:flex; gap:10px; margin-top:16px; }
+  .stock .box { flex:1; text-align:center; background:var(--cream); border-radius:14px; padding:14px 10px; }
+  .stock .num { font-size:28px; font-weight:800; color:var(--primary); }
+  .stock .lab { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-mute); margin-top:2px; }
+  .order { margin-top:12px; font-size:17px; font-weight:700; text-align:center; color:var(--error); }
+  .order.ok { color:var(--success); }
+  .err { margin-top:16px; background:#fbeae4; color:var(--error); border-radius:14px; padding:16px; font-size:16px; font-weight:600; }
+  .muted { color:var(--ink-mute); font-size:13px; line-height:1.5; margin-top:8px; }
+  .ok { color:var(--success); }
+  .done { background:#e2f2ec; color:var(--success); border-radius:14px; padding:12px 14px; font-size:16px; font-weight:800; text-align:center; margin-bottom:14px; }
+  .qtyrow { display:flex; gap:8px; margin-top:16px; align-items:stretch; }
+  .qtyrow input { flex:1; min-width:0; text-align:center; }
+  .qtyrow button { flex:0 0 auto; white-space:nowrap; padding:13px 20px; }
+  .minus { background:var(--canvas); color:var(--primary); box-shadow:inset 0 0 0 1.6px var(--primary); }
+  .plus { background:var(--lavender); color:var(--primary); }
+  .verify { background:var(--primary); }
+  .chk { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--hairline); font-size:15px; }
+  .chk .dot { width:22px; text-align:center; font-size:18px; }
+  .chk.done { color:var(--success); }
+  .chk small { color:var(--ink-mute); margin-left:auto; white-space:nowrap; }
+  .sec { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--ink-mute); margin:16px 0 6px; }
+  .warnbanner { background:#fdf0e6; color:#9a3412; border-radius:12px; padding:10px 12px; margin-top:8px; font-weight:700; font-size:14px; }
+  .casehdr { background:var(--lavender); color:var(--primary); border-radius:12px; padding:11px 13px; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">📦 재고 QR — 수량 관리</h1>
+
+  <div id="normalUI">
+    <div class="row">
+      <input id="code" placeholder="ZR-1 또는 케이스 QR" autocomplete="off" inputmode="text"
+             onkeydown="if(event.key==='Enter')submitInput()">
+      <button onclick="submitInput()">확인</button>
+    </div>
+    <div class="btns">
+      <button id="camBtn" onclick="toggleCam()">📷 카메라 스캔</button>
+      <button class="ghost" onclick="enterToolMode()">🔧 툴 교체</button>
+    </div>
+    <div class="muted">재고코드(MF-1)=수량 / <b>케이스 QR 먼저 스캔=자재검수</b> / <b>툴 QR(TL-)=툴 교체</b>. 미개봉 디스크는 수축률 입력 후 🔓 개봉.</div>
+  </div>
+
+  <div id="boxPanel"></div>
+  <div id="reader"></div>
+  <div id="result"></div>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+  var GAS = 'https://script.google.com/macros/s/AKfycbyq7xJO7lGJXLNGrASOMQQ2sHmI2j7J6qANPcCSmiJkLpLY90heLTJLtXaChbUAmyO-/exec';
+  var qr = null, camOn = false, lastCode = '';
+  var BOX = null, scanMode = 'lookup', lastScan = '';
+
+  function getParam(n) {
+    var m = new RegExp('[?&]' + n + '=([^&#]+)').exec(location.search);
+    return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null;
+  }
+  function box3(v) { return ('000' + String(v)).slice(-3); }   // 박스번호 3자리 표시 (78 -> 078)
+
+  // ?box=N 이면 박스 배정 모드, ?tool=1 이면 툴 교체 모드로 진입
+  window.addEventListener('load', function () {
+    var b = getParam('box');
+    if (b !== null && b !== '') {
+      BOX = b; scanMode = 'assign';
+      document.getElementById('title').textContent = '📦 박스 ' + box3(b) + ' 배정';
+      document.getElementById('normalUI').style.display = 'none';
+      renderBoxPrompt();
+      startCam();
+      return;
+    }
+    if (getParam('tool') !== null) { enterToolMode(); }
+  });
+
+  function renderBoxPrompt() {
+    document.getElementById('boxPanel').innerHTML =
+      '<div class="card">' +
+        '<div class="done" style="background:#f9f0ff;color:#4a154b">박스 ' + box3(BOX) + ' 인식됨</div>' +
+        '<div style="font-size:19px;margin:8px 0 4px">📷 <b>의뢰서 QR</b>을 찍으세요</div>' +
+        '<div class="muted">카메라가 자동으로 켜집니다. 안 켜지면 아래 버튼을 누르세요.</div>' +
+        '<div class="btns" style="margin-top:10px">' +
+          '<button class="ghost" onclick="startCam()">📷 카메라 켜기</button>' +
+        '</div>' +
+      '</div>';
+    document.getElementById('result').innerHTML = '';
+  }
+
+  function doAssign(text, force) {
+    lastScan = text;
+    var url = GAS + '?action=assignbox&box=' + encodeURIComponent(BOX) + '&code=' + encodeURIComponent(text);
+    if (force) url += '&force=1';
+    document.getElementById('boxPanel').innerHTML = '';
+    document.getElementById('result').innerHTML = '<div class="card">박스 ' + box3(BOX) + ' 배정 중…</div>';
+    fetch(url).then(function (r) { return r.json(); }).then(renderAssign)
+      .catch(function (e) { renderAssignErr('통신 오류: ' + e.message); });
+  }
+
+  function renderAssign(r) {
+    var el = document.getElementById('result');
+    if (r && r.conflict) {
+      el.innerHTML = '<div class="card">' +
+        '<div class="err">⚠️ ' + r.msg + '</div>' +
+        '<div class="btns" style="margin-top:12px">' +
+          '<button class="ghost" onclick="boxRescan()">📷 다시 스캔</button>' +
+          '<button class="minus" onclick="doAssign(lastScan, 1)">그래도 박스 ' + box3(BOX) + ' 배정</button>' +
+        '</div></div>';
+      return;
+    }
+    if (!r || !r.ok) { renderAssignErr(r ? r.msg : '응답 없음'); return; }
+    var prevTxt = (r.prev != null && String(r.prev) !== String(r.box))
+      ? '<div class="muted" style="margin-top:6px">기존 박스 ' + box3(r.prev) + ' → ' + box3(r.box) + '로 변경</div>' : '';
+    var i = r.info || {};
+    function row(lab, val) { return val ? '<div class="spec"><b>' + lab + '</b><span>' + val + '</span></div>' : ''; }
+    var big = i.patient || r.caseName || '케이스';
+    var specs = row('치과', i.clinic) + row('보철', i.prosth) + row('완성일', i.due);
+    el.innerHTML = '<div class="card">' +
+      '<div class="done">✓ 박스 ' + box3(r.box) + ' 배정 완료' + (r.count > 1 ? ' · ' + r.count + '건' : '') + '</div>' +
+      '<div class="name">' + big + '</div>' +
+      specs + prevTxt +
+      '<div class="btns" style="margin-top:14px">' +
+        '<button class="ghost" onclick="boxRescan()">📷 다른 의뢰서 다시 스캔</button>' +
+      '</div></div>';
+  }
+
+  function renderAssignErr(msg) {
+    document.getElementById('result').innerHTML =
+      '<div class="card"><div class="err">⚠️ ' + msg + '</div>' +
+      '<div class="btns" style="margin-top:12px"><button class="ghost" onclick="boxRescan()">📷 다시 스캔</button></div></div>';
+  }
+
+  function boxRescan() { renderBoxPrompt(); startCam(); }
+
+  function doLookup() {
+    var code = document.getElementById('code').value.trim();
+    if (!code) return;
+    render({ loading: true });
+    fetch(GAS + '?action=lookup&code=' + encodeURIComponent(code))
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message }); });
+  }
+
+  function doAdjust(sign) {
+    var q = parseInt(document.getElementById('qty').value, 10);
+    if (!q || q < 1) q = 1;
+    var delta = sign * q;
+    render({ loading: true, msg: '반영 중…' });
+    fetch(GAS + '?action=adjust&code=' + encodeURIComponent(lastCode) + '&delta=' + delta)
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message + ' — 재시도하세요' }); });
+  }
+
+  function doOpen() {
+    var sh = document.getElementById('shrink').value.trim();
+    if (!sh) { alert('수축률을 입력하세요 (예: 1.2332)'); return; }
+    var eq = (document.getElementById('equip') || {}).value || '';
+    if (!eq) { alert('장비를 선택하세요'); return; }
+    render({ loading: true, msg: '개봉 처리 중…' });
+    fetch(GAS + '?action=open&code=' + encodeURIComponent(lastCode) + '&shrink=' + encodeURIComponent(sh) + '&equip=' + encodeURIComponent(eq))
+      .then(function (r) { return r.json(); })
+      .then(render)
+      .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message + ' — 재시도하세요' }); });
+  }
+
+  function renderOpened(r) {
+    var el = document.getElementById('result');
+    el.innerHTML =
+      '<div class="card">' +
+        '<div class="done">🔓 개봉 완료 · 미개봉 ' + nz(r.remain) + '개 남음</div>' +
+        '<div class="muted">아래 일련번호로 블럭에 라벨을 붙이세요</div>' +
+        '<div class="code" style="font-size:23px;margin-top:6px;word-break:break-all">' + r.serial + '</div>' +
+        '<div class="spec"><b>블럭</b><span>' + r.block + '</span></div>' +
+        '<div class="spec"><b>두께 / 쉐이드</b><span>' + r.thick + 'T / ' + r.shade + '</span></div>' +
+        '<div class="spec"><b>수축률</b><span>' + r.shrink + '</span></div>' +
+        '<div class="spec"><b>장비</b><span>' + fmt(r.equip) + (r.equipAbbr ? ' (' + r.equipAbbr + ')' : '') + '</span></div>' +
+        '<div class="btns" style="margin-top:14px">' +
+          '<button class="ghost" onclick="reLookup()">← 같은 디스크 다시 조회</button>' +
+        '</div>' +
+      '</div>';
+  }
+  function reLookup() { document.getElementById('code').value = lastCode; doLookup(); }
+
+  function render(r) {
+    var el = document.getElementById('result');
+    if (r && r.loading) { el.innerHTML = '<div class="card">' + (r.msg || '조회 중…') + '</div>'; return; }
+    if (!r || !r.ok) { el.innerHTML = '<div class="err">⚠️ ' + (r ? r.msg : '응답 없음') + '</div>'; return; }
+    if (r.serial) { lastCode = r.code; renderOpened(r); return; }
+    lastCode = r.code;
+    var isDiskUnopened = (r.db === '디스크' && r.specs && r.specs['구분'] === '미개봉재고');
+    var done = r.applied
+      ? '<div class="done">✓ 반영 완료 (' + (r.delta > 0 ? '입고 +' + r.delta : '사용 ' + r.delta) + ' → 현재 ' + nz(r.current) + '개)</div>'
+      : '';
+    var specs = '';
+    for (var k in r.specs) specs += '<div class="spec"><b>' + k + '</b><span>' + fmt(r.specs[k]) + '</span></div>';
+    var order = r.order ? '<div class="order ' + (String(r.order).indexOf('🔴') >= 0 ? '' : 'ok') + '">' + r.order + '</div>' : '';
+    el.innerHTML =
+      '<div class="card">' + done +
+        '<div><span class="code">' + r.code + '</span><span class="db">' + r.db + '</span></div>' +
+        '<div class="name">' + (r.name || '') + '</div>' +
+        specs +
+        '<div class="stock">' +
+          '<div class="box"><div class="num">' + nz(r.current) + '</div><div class="lab">현재재고</div></div>' +
+          '<div class="box"><div class="num">' + nz(r.safety) + '</div><div class="lab">안전재고</div></div>' +
+        '</div>' + order +
+        '<div class="qtyrow">' +
+          '<button class="minus" onclick="doAdjust(-1)">− 사용</button>' +
+          '<input id="qty" type="number" value="1" min="1" inputmode="numeric">' +
+          '<button class="plus" onclick="doAdjust(1)">+ 입고</button>' +
+        '</div>' +
+        (isDiskUnopened ?
+          '<div class="muted" style="margin-top:14px">🔓 디스크 개봉 — 장비 선택 + 수축률 입력 후 개봉(미개봉 −1, 사용블럭 자동생성)</div>' +
+          '<div class="qtyrow">' +
+            '<select id="equip" style="flex:1;font-size:18px;padding:14px;border:1.5px solid #e6e6e6;border-radius:12px;background:#fff">' +
+              '<option value="">장비 선택…</option>' +
+              '<option value="시로나">시로나 (Si)</option>' +
+              '<option value="아름 500L">아름 500L</option>' +
+              '<option value="아름 A5">아름 A5</option>' +
+              '<option value="250i">250i</option>' +
+            '</select>' +
+          '</div>' +
+          '<div class="qtyrow">' +
+            '<input id="shrink" placeholder="수축률 예: 1.2332" inputmode="decimal" style="flex:1;text-transform:none">' +
+            '<button class="verify" onclick="doOpen()">🔓 개봉</button>' +
+          '</div>' : '') +
+      '</div>';
+  }
+  function fmt(v){ return (v===''||v==null)?'-':v; }
+  function nz(v){ return (v==null)?'-':v; }
+
+  /* ===== B-1 자재검수 ===== */
+  var VCASE = null;   // {caseId, info, abut[], hw[], scannedMF{}, hwDone}
+
+  function isStockCode(t) { return /^(MF|HW|ZR)-?\d+$/i.test(t.trim()); }
+  function isToolCode(t) { return /^TL-?\d+$/i.test(t.trim()); }
+  function hasPageId(t) { return /[0-9a-fA-F]{32}/.test(t.replace(/-/g, '')); }
+
+  // 입력창/스캔 공통 라우터: 툴코드=툴교체, 재고코드=수량/검수, 케이스QR=검수 진입
+  function handleText(text) {
+    text = (text || '').trim();
+    if (!text) return;
+    if (isToolCode(text)) {
+      enterTool(text.toUpperCase().replace(/\s+/g, ''));
+    } else if (scanMode === 'tool') {
+      document.getElementById('result').innerHTML = '<div class="card"><div class="warnbanner">툴 QR(TL-)을 스캔하세요. 읽은 값: ' + text + '</div></div>';
+    } else if (isStockCode(text)) {
+      var code = text.toUpperCase().replace(/\s+/g, '');
+      if (VCASE) doVerify(code);
+      else { document.getElementById('code').value = code; doLookup(); }
+    } else if (hasPageId(text)) {
+      enterCase(text);
+    } else if (extractGtin(text)) {
+      handleGtin(extractGtin(text));
+    } else {
+      render({ ok: false, msg: '재고코드(예 MF-1)·케이스 QR·툴 QR(TL-)·포장지 바코드를 인식 못했습니다' });
+    }
+  }
+  function submitInput() { handleText(document.getElementById('code').value); }
+
+  /* ===== 포장지 GTIN(바코드) ===== */
+  function extractGtin(t) {
+    var m = String(t || '').match(/01(\d{14})/);   // GS1: (01)+GTIN14
+    return m ? m[1] : null;
+  }
+  function handleGtin(gtin) {
+    document.getElementById('result').innerHTML = '<div class="card">포장지 조회 중… (GTIN ' + gtin + ')</div>';
+    fetch(GAS + '?action=gtin&gtin=' + encodeURIComponent(gtin))
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r || !r.ok) { afterGtinErr('조회 오류: ' + (r ? r.msg : '응답 없음')); return; }
+        if (r.found) {                       // 등록된 포장지 → 그 재고코드로 검수
+          if (VCASE) doVerify(r.code);
+          else { document.getElementById('code').value = r.code; doLookup(); }
+        } else {                             // 처음 보는 포장지
+          if (VCASE) promptGtinRegister(gtin);
+          else afterGtinErr('등록 안 된 포장지입니다. 검수는 케이스 QR 먼저 스캔하세요.');
+        }
+      })
+      .catch(function (e) { afterGtinErr('통신 오류: ' + e.message); });
+  }
+  function afterGtinErr(msg) {
+    if (VCASE) drawCase('<div class="warnbanner">' + msg + '</div>');
+    else render({ ok: false, msg: msg });
+  }
+  function promptGtinRegister(gtin) {
+    var abut = (VCASE && VCASE.abut) || [];
+    var btns = abut.map(function (a) {
+      return '<button class="verify" style="width:100%;margin:5px 0" onclick="regGtin(\'' + gtin + '\',\'' + a.code + '\')">이 포장 = ' + (a.code || '?') + ' (' + (a.name || '') + ')</button>';
+    }).join('');
+    document.getElementById('result').innerHTML =
+      '<div class="card"><div class="warnbanner">처음 보는 포장지입니다 (GTIN ' + gtin + ')</div>' +
+      '<div class="muted" style="margin:8px 0">포장지 제품명을 보고, 이 케이스 어버트 중 무엇인지 골라 등록하세요:</div>' +
+      (btns || '<div class="muted">이 케이스에 지정된 어버트가 없습니다</div>') +
+      '<div class="btns" style="margin-top:8px"><button class="ghost" onclick="drawCase(\'\')">취소</button></div></div>';
+  }
+  function regGtin(gtin, code) {
+    document.getElementById('result').innerHTML = '<div class="card">등록 중…</div>';
+    fetch(GAS + '?action=gtinreg&gtin=' + encodeURIComponent(gtin) + '&code=' + encodeURIComponent(code))
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r || !r.ok) { afterGtinErr('등록 실패: ' + (r ? r.msg : '응답 없음')); return; }
+        doVerify(code);                       // 등록 후 바로 검수(통과될 것)
+      })
+      .catch(function (e) { afterGtinErr('통신 오류: ' + e.message); });
+  }
+
+  function enterCase(text) {
+    stopCam();
+    document.getElementById('result').innerHTML = '<div class="card">케이스 불러오는 중…</div>';
+    fetch(GAS + '?action=casereq&code=' + encodeURIComponent(text))
+      .then(function (r) { return r.json(); }).then(renderCase)
+      .catch(function (e) { render({ ok: false, msg: '통신 오류: ' + e.message }); });
+  }
+
+  function renderCase(r) {
+    if (!r || !r.ok) { render({ ok: false, msg: (r ? r.msg : '응답 없음') }); return; }
+    VCASE = { caseId: r.caseId, info: r.info || {}, abut: r.abutments || [], hw: r.hwanbong || [],
+              abutEmptyRel: r.abutEmptyRel, scannedMF: {}, hwDone: 0 };
+    scanMode = 'verify';
+    document.getElementById('title').textContent = '🔩 자재검수';
+    drawCase('<div class="casehdr">케이스 불러옴 — 자재 QR을 이어서 스캔하세요</div>');
+  }
+
+  // 상단 배너 + 케이스 정보/체크리스트 + 버튼 렌더
+  function drawCase(banner) {
+    if (!VCASE) return;
+    var i = VCASE.info || {};
+    var hdr =
+      '<div class="name" style="margin-bottom:6px">' + (i.name || '케이스') + '</div>' +
+      (i.clinic ? '<div class="spec"><b>치과</b><span>' + i.clinic + '</span></div>' : '') +
+      (i.imp ? '<div class="spec"><b>임플란트</b><span>' + i.imp + '</span></div>' : '') +
+      (i.teeth ? '<div class="spec"><b>치식</b><span>' + i.teeth + '</span></div>' : '');
+
+    var abutHtml = '<div class="sec">어버트 (MF) — 지정 ' + VCASE.abut.length + '종</div>';
+    if (!VCASE.abut.length) {
+      abutHtml += '<div class="muted">' + (VCASE.abutEmptyRel ? '⚠️ 재고항목 미지정(디자이너 확인)' : '지정된 어버트 없음') + '</div>';
+    } else {
+      VCASE.abut.forEach(function (a) {
+        var sc = VCASE.scannedMF[a.code] || 0, done = sc >= a.qty;
+        abutHtml += '<div class="chk ' + (done ? 'done' : '') + '">' +
+          '<span class="dot">' + (done ? '✅' : '☐') + '</span>' +
+          '<span>' + (a.code || '?') + ' · ' + (a.name || '') + '</span>' +
+          '<small>' + sc + '/' + a.qty + (a.current != null ? ' · 재고 ' + a.current : '') + '</small></div>';
+      });
+    }
+
+    var hwHtml = '';
+    if (VCASE.hw.length) {
+      hwHtml += '<div class="sec">환봉 (HW) — 요구 ' + VCASE.hw.length + '건 · 검수 ' + VCASE.hwDone + '</div>';
+      VCASE.hw.forEach(function (h, idx) {
+        var done = idx < VCASE.hwDone;
+        hwHtml += '<div class="chk ' + (done ? 'done' : '') + '">' +
+          '<span class="dot">' + (done ? '✅' : '☐') + '</span>' +
+          '<span>' + (h.imp || '-') + ' · ' + (h.dia || '-') + ' · ' + (h.hex || '-') + '</span></div>';
+      });
+    }
+
+    document.getElementById('result').innerHTML =
+      '<div class="card">' + (banner || '') + hdr + abutHtml + hwHtml +
+        '<div class="btns" style="margin-top:14px">' +
+          '<button class="verify" onclick="startCam()">📷 자재 스캔</button>' +
+          '<button class="ghost" onclick="clearCase()">✖ 검수 종료</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function clearCase() {
+    VCASE = null; scanMode = 'lookup';
+    document.getElementById('title').textContent = '📦 재고 QR — 수량 관리';
+    document.getElementById('code').value = '';
+    document.getElementById('result').innerHTML = '';
+    stopCam();
+  }
+
+  function doVerify(code) {
+    var prefix = code.slice(0, 2).toUpperCase();
+    var act = prefix === 'MF' ? 'verifymf' : prefix === 'HW' ? 'verifyhw' : prefix === 'ZR' ? 'verifyzr' : null;
+    if (!act) { drawCase('<div class="warnbanner">인식 못한 자재 코드: ' + code + '</div>'); return; }
+    stopCam();
+    document.getElementById('result').innerHTML = '<div class="card">검수 중… (' + code + ')</div>';
+    fetch(GAS + '?action=' + act + '&caseId=' + encodeURIComponent(VCASE.caseId) + '&code=' + encodeURIComponent(code))
+      .then(function (r) { return r.json(); })
+      .then(function (r) { renderVerify(r, code); })
+      .catch(function (e) { drawCase('<div class="warnbanner">통신 오류: ' + e.message + ' — 다시 스캔</div>'); });
+  }
+
+  function warnsHtml(warns) {
+    if (!warns || !warns.length) return '';
+    return warns.map(function (w) { return '<div class="warnbanner">' + w + '</div>'; }).join('');
+  }
+
+  function renderVerify(r, code) {
+    if (!r) { drawCase('<div class="warnbanner">응답 없음 — 다시 스캔</div>'); return; }
+
+    if (r.ok && r.matched) {                       // ✅ 일치
+      if (r.mode === 'ZR') { drawCase('<div class="done">✅ 블럭 연결됨 — ' + r.block.code + ' (' + r.block.serial + ') → 밀링행 ' + r.linkedCount + '개</div>'); return; }
+      bumpScanned(r);
+      drawCase('<div class="done">✅ 일치 — ' + r.code + ' ' + (r.name || '') + ' · 현재 ' + nz(r.current) + '개</div>' + warnsHtml(r.warns));
+      return;
+    }
+    if (r.ok && r.forced) {                         // 강제 진행됨
+      if (r.mode === 'ZR') { drawCase('<div class="done" style="background:#fef3c7;color:#92400e">⚠️→ 강제 연결됨 — ' + r.block.code + ' (' + r.block.serial + ')</div><div class="muted">쉐이드/두께 불일치 · 기록됨</div>'); return; }
+      bumpScanned(r);
+      drawCase('<div class="done" style="background:#fef3c7;color:#92400e">⚠️→ 강제 진행됨 — ' + r.code + ' · 현재 ' + nz(r.current) + '개</div>' +
+        '<div class="muted">사유 기록됨 · ' + (r.reason || '') + '</div>' + warnsHtml(r.warns));
+      return;
+    }
+    if (r.ok === false && r.matched === false) {    // ⚠️ 불일치
+      showMismatch(r, code);
+      return;
+    }
+    drawCase('<div class="warnbanner">⚠️ ' + (r.msg || r.reason || '오류') + '</div>');  // 조회 실패 등
+  }
+
+  function bumpScanned(r) {
+    if (r.mode === 'MF') VCASE.scannedMF[r.code] = (VCASE.scannedMF[r.code] || 0) + 1;
+    else if (r.mode === 'HW') VCASE.hwDone += 1;
+  }
+
+  function showMismatch(r, code) {
+    var detail = '';
+    if (r.mode === 'MF') {
+      detail = '<div class="spec"><b>스캔</b><span>' + r.scanned.code + ' ' + (r.scanned.name || '') + '</span></div>' +
+        (r.requiredCodes && r.requiredCodes.length ? '<div class="spec"><b>이 케이스 지정</b><span>' + r.requiredCodes.join(', ') + '</span></div>' : '');
+    } else if (r.mode === 'ZR') {
+      detail = '<div class="spec"><b>스캔 블럭</b><span>' + r.block.code + ' (' + r.block.serial + ')</span></div>' +
+        '<div class="spec"><b>블럭 쉐이드/두께</b><span>' + fmt(r.block.shade) + ' / ' + fmt(r.block.thick) + 'T</span></div>';
+      (r.mills || []).forEach(function (m) {
+        detail += '<div class="spec" style="color:#cc4117"><b>밀링행 요구</b><span>' + fmt(m.shade) + ' / ' + fmt(m.thick) + 'T</span></div>';
+      });
+    } else {
+      detail = '<div class="spec"><b>스캔 환봉</b><span>' + r.scanned.code + '</span></div>';
+      (r.diff || []).forEach(function (d) {
+        detail += '<div class="spec" style="color:#cc4117"><b>' + d.k + '</b><span>케이스 ' + d.case + ' ≠ 실물 ' + d.real + '</span></div>';
+      });
+    }
+    var btns =
+      '<div class="btns" style="margin-top:12px">' +
+        '<button class="ghost" onclick="startCam()">📷 다시 스캔</button>' +
+        '<button class="minus" onclick="forceVerify(\'' + code + '\',\'' + r.mode + '\')">강제 진행</button>' +
+      '</div>';
+    document.getElementById('result').innerHTML =
+      '<div class="card"><div class="err">⚠️ ' + r.reason + '</div>' + detail + btns +
+        '<div class="btns"><button class="ghost" onclick="drawCase(\'\')">← 체크리스트로</button></div>' +
+      '</div>';
+  }
+
+  function forceVerify(code, mode) {
+    var reason = prompt('강제 진행 사유를 입력하세요 (필수):', '');
+    if (!reason || !reason.trim()) { alert('사유를 입력해야 강제 진행됩니다.'); return; }
+    var act = mode === 'MF' ? 'verifymf' : mode === 'ZR' ? 'verifyzr' : 'verifyhw';
+    document.getElementById('result').innerHTML = '<div class="card">강제 진행 중…</div>';
+    fetch(GAS + '?action=' + act + '&caseId=' + encodeURIComponent(VCASE.caseId) +
+          '&code=' + encodeURIComponent(code) + '&force=1&reason=' + encodeURIComponent(reason.trim()))
+      .then(function (r) { return r.json(); })
+      .then(function (r) { renderVerify(r, code); })
+      .catch(function (e) { drawCase('<div class="warnbanner">통신 오류: ' + e.message + '</div>'); });
+  }
+
+  /* ===== 툴 교체 로그 ===== */
+  var TOOL = null;   // {code, name, kind, equips:[{id,name}]}
+
+  // 툴 교체 모드 진입(전용 단말 ?tool=1 또는 🔧 버튼)
+  function enterToolMode() {
+    scanMode = 'tool'; TOOL = null;
+    document.getElementById('title').textContent = '🔧 툴 교체';
+    document.getElementById('normalUI').style.display = 'none';
+    document.getElementById('result').innerHTML = '';
+    renderToolPrompt();
+    startCam();
+  }
+
+  function renderToolPrompt() {
+    document.getElementById('boxPanel').innerHTML =
+      '<div class="card">' +
+        '<div class="done" style="background:#efe3f3;color:#592466">🔧 툴 교체 모드</div>' +
+        '<div style="font-size:19px;margin:8px 0 4px">📷 <b>툴 QR</b>을 스캔하세요</div>' +
+        '<div class="muted">툴을 찍으면 “어느 장비에 교체?” 버튼이 나옵니다.</div>' +
+        '<div class="btns" style="margin-top:10px">' +
+          '<button class="ghost" onclick="startCam()">📷 카메라 켜기</button>' +
+          '<button class="ghost" onclick="exitTool()">✖ 종료</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function enterTool(code) {
+    scanMode = 'tool'; stopCam();
+    document.getElementById('boxPanel').innerHTML = '';
+    document.getElementById('result').innerHTML = '<div class="card">툴 불러오는 중… (' + code + ')</div>';
+    fetch(GAS + '?action=toolinfo&code=' + encodeURIComponent(code))
+      .then(function (r) { return r.json(); }).then(renderTool)
+      .catch(function (e) { toolErr('통신 오류: ' + e.message); });
+  }
+
+  function renderTool(r) {
+    if (!r || !r.ok) { toolErr(r ? r.msg : '응답 없음'); return; }
+    TOOL = { code: r.tool.code, name: r.tool.name, kind: r.tool.kind, equips: r.equips || [] };
+    var btns = TOOL.equips.map(function (eq, idx) {
+      return '<button class="verify" style="width:100%;margin-top:8px" onclick="logTool(' + idx + ')">' + eq.name + '</button>';
+    }).join('');
+    if (!TOOL.equips.length) btns = '<div class="muted">등록된 장비가 없습니다 — 장비 DB를 확인하세요.</div>';
+    var hint = r.allEquip ? '<div class="muted">호환 장비 미지정 → 전체 장비 표시</div>' : '';
+    document.getElementById('result').innerHTML =
+      '<div class="card">' +
+        '<div><span class="code">' + TOOL.code + '</span><span class="db" style="background:#4a154b">툴</span></div>' +
+        '<div class="name">' + TOOL.name + (TOOL.kind ? ' · ' + TOOL.kind : '') + '</div>' +
+        '<div class="sec">어느 장비에 교체했나요?</div>' + hint + btns +
+        '<div class="btns" style="margin-top:14px">' +
+          '<button class="ghost" onclick="toolRescan()">📷 다른 툴 스캔</button>' +
+          '<button class="ghost" onclick="exitTool()">✖ 종료</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function logTool(idx) {
+    if (!TOOL || !TOOL.equips[idx]) return;
+    var eq = TOOL.equips[idx];
+    document.getElementById('result').innerHTML = '<div class="card">기록 중… (' + TOOL.name + ' → ' + eq.name + ')</div>';
+    fetch(GAS + '?action=toollog&code=' + encodeURIComponent(TOOL.code) + '&equip=' + encodeURIComponent(eq.id))
+      .then(function (r) { return r.json(); }).then(renderToolDone)
+      .catch(function (e) { toolErr('통신 오류: ' + e.message + ' — 재시도하세요'); });
+  }
+
+  function renderToolDone(r) {
+    if (!r || !r.ok) { toolErr(r ? r.msg : '응답 없음'); return; }
+    document.getElementById('result').innerHTML =
+      '<div class="card">' +
+        '<div class="done">✓ 기록 완료</div>' +
+        '<div class="name" style="text-align:center">' + r.toolName + ' → ' + r.equipName + '</div>' +
+        '<div class="btns" style="margin-top:14px">' +
+          '<button class="verify" style="background:#4a154b" onclick="toolRescan()">📷 다음 툴 교체</button>' +
+          '<button class="ghost" onclick="exitTool()">✖ 종료</button>' +
+        '</div>' +
+      '</div>';
+    TOOL = null;
+  }
+
+  function toolErr(msg) {
+    document.getElementById('result').innerHTML =
+      '<div class="card"><div class="err">⚠️ ' + msg + '</div>' +
+      '<div class="btns" style="margin-top:12px"><button class="ghost" onclick="toolRescan()">📷 다시 스캔</button></div></div>';
+  }
+
+  function toolRescan() {
+    TOOL = null; scanMode = 'tool';
+    document.getElementById('result').innerHTML = '';
+    renderToolPrompt();
+    startCam();
+  }
+
+  function exitTool() {
+    TOOL = null; scanMode = 'lookup';
+    document.getElementById('boxPanel').innerHTML = '';
+    document.getElementById('result').innerHTML = '';
+    document.getElementById('normalUI').style.display = '';
+    document.getElementById('title').textContent = '📦 재고 QR — 수량 관리';
+    stopCam();
+  }
+
+  function onScan(text) {
+    stopCam();
+    if (scanMode === 'assign') { doAssign(text); }
+    else { handleText(text); }
+  }
+  function setCamBtn(t) { var b = document.getElementById('camBtn'); if (b) b.textContent = t; }
+
+  var bdStream = null, bdVideo = null, bdDetector = null;
+
+  function startCam() {
+    if (camOn) return;
+    // BarcodeDetector 지원(안드로이드 크롬) → QR+DataMatrix(포장지) 둘 다 읽음. 없으면 html5-qrcode(QR전용) 폴백.
+    if ('BarcodeDetector' in window) startCamBD();
+    else startCamHtml5();
+  }
+  function startCamHtml5() {
+    if (typeof Html5Qrcode === 'undefined') { alert('스캐너 로드 실패 — 입력창을 쓰세요.'); return; }
+    qr = new Html5Qrcode('reader');
+    qr.start({ facingMode: 'environment' }, { fps: 10, qrbox: 220 }, onScan, function () {})
+      .then(function () { camOn = true; setCamBtn('⏹ 스캔 중지'); })
+      .catch(function (e) { alert('카메라를 열 수 없습니다: ' + e + '\n입력창으로 조회하세요.'); });
+  }
+  function startCamBD() {
+    var reader = document.getElementById('reader');
+    reader.innerHTML = '<video id="bdvid" playsinline muted style="width:100%;border-radius:12px;background:#000"></video>';
+    bdVideo = document.getElementById('bdvid');
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+      .then(function (stream) {
+        bdStream = stream; bdVideo.srcObject = stream; bdVideo.play();
+        bdDetector = new BarcodeDetector({ formats: ['qr_code', 'data_matrix', 'code_128', 'ean_13'] });
+        camOn = true; setCamBtn('⏹ 스캔 중지'); bdLoop();
+      })
+      .catch(function () { startCamHtml5(); });   // 카메라 실패 시 폴백
+  }
+  function bdLoop() {
+    if (!camOn || !bdDetector || !bdVideo) return;
+    bdDetector.detect(bdVideo).then(function (codes) {
+      if (codes && codes.length) { onScan(codes[0].rawValue); return; }   // onScan이 stopCam 호출
+      if (camOn) requestAnimationFrame(bdLoop);
+    }).catch(function () { if (camOn) requestAnimationFrame(bdLoop); });
+  }
+  function toggleCam() { if (camOn) stopCam(); else startCam(); }
+  function stopCam() {
+    // camOn 가드: 이미 멈춘 상태에서 또 stop()하면 html5-qrcode가 깨져 카메라가 얼어붙음. 실제 정지는 한 번만.
+    if (qr && camOn) { qr.stop().then(function(){ qr.clear(); }).catch(function(){}); }
+    if (bdStream) { bdStream.getTracks().forEach(function (t) { t.stop(); }); bdStream = null; bdDetector = null; bdVideo = null; }
+    camOn = false; setCamBtn('📷 카메라 스캔');
+  }
+</script>
+</body>
+</html>
