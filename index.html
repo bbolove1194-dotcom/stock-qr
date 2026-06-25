@@ -5,45 +5,78 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>재고 QR</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  :root{
+    --primary:#4a154b; --primary-press:#611f69; --on-primary:#fff;
+    --ink:#1d1d1d; --ink-mute:#696969; --link:#1264a3;
+    --canvas:#fff; --cream:#f4ede4; --lavender:#f9f0ff;
+    --hairline:#e6e6e6; --error:#cc4117; --success:#007a5a;
+  }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  body { margin: 0; font-family: -apple-system, "Malgun Gothic", sans-serif; background: #f4f5f7; color: #1a1a1a; }
-  .wrap { max-width: 520px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 20px; margin: 8px 0 16px; }
+  body {
+    margin:0; color:var(--ink); min-height:100vh;
+    font-family:'Inter', system-ui, -apple-system, "Malgun Gothic", sans-serif;
+    background:
+      radial-gradient(900px 520px at 12% -8%, #fff0e6 0%, rgba(255,240,230,0) 60%),
+      radial-gradient(820px 520px at 112% -4%, #efe0ff 0%, rgba(239,224,255,0) 55%),
+      radial-gradient(760px 620px at 50% 118%, #e6f3ea 0%, rgba(230,243,234,0) 55%),
+      #f9f0ff;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 18px 16px 44px; }
+  h1 { font-size:25px; font-weight:800; letter-spacing:-.4px; color:var(--primary); margin:10px 0 18px; }
   .row { display: flex; gap: 8px; }
-  input { flex: 1; font-size: 22px; padding: 14px; border: 2px solid #c9ced6; border-radius: 12px; text-transform: uppercase; }
-  button { font-size: 18px; font-weight: 700; padding: 14px 18px; border: 0; border-radius: 12px; background: #2d6cdf; color: #fff; }
-  button.ghost { background: #e7ebf2; color: #2d3b53; }
+  .row > button { flex: 0 0 auto; }
+  input, select {
+    font-family:inherit; font-size:20px; padding:13px 14px;
+    border:1.5px solid var(--hairline); border-radius:12px; background:var(--canvas); color:var(--ink);
+  }
+  input { flex:1; min-width:0; text-transform:uppercase; }
+  input:focus, select:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(74,21,75,.13); }
+  button {
+    font-family:inherit; font-size:16px; font-weight:700; letter-spacing:.2px;
+    padding:13px 24px; border:0; border-radius:90px; white-space:nowrap;
+    background:var(--primary); color:var(--on-primary); cursor:pointer; transition:background .12s, transform .04s;
+  }
+  button:active { background:var(--primary-press); transform:translateY(1px); }
+  button.ghost { background:var(--lavender); color:var(--primary); }
   .btns { display: flex; gap: 8px; margin-top: 10px; }
   .btns button { flex: 1; }
-  #reader { margin-top: 14px; border-radius: 12px; overflow: hidden; }
-  .card { margin-top: 16px; background: #fff; border-radius: 16px; padding: 18px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
-  .code { font-size: 30px; font-weight: 800; }
-  .db { display: inline-block; font-size: 13px; font-weight: 700; color: #fff; background: #2d6cdf; padding: 3px 10px; border-radius: 999px; margin-left: 8px; vertical-align: middle; }
-  .name { font-size: 22px; margin: 8px 0 14px; }
-  .spec { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eef0f3; font-size: 17px; }
-  .spec b { color: #5b6472; font-weight: 600; }
-  .stock { display: flex; gap: 10px; margin-top: 14px; }
-  .stock .box { flex: 1; text-align: center; background: #f4f6f9; border-radius: 12px; padding: 12px; }
-  .stock .num { font-size: 28px; font-weight: 800; }
-  .stock .lab { font-size: 13px; color: #6b7280; }
-  .order { margin-top: 12px; font-size: 18px; font-weight: 700; text-align: center; }
-  .err { margin-top: 16px; background: #fde8e8; color: #b42318; border-radius: 12px; padding: 16px; font-size: 17px; }
-  .muted { color: #8a8f98; font-size: 13px; margin-top: 6px; }
-  .ok { color: #157347; }
-  .done { background: #e6f6ec; color: #157347; border-radius: 12px; padding: 12px; font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 14px; }
-  .qtyrow { display: flex; gap: 8px; margin-top: 16px; align-items: stretch; }
-  .qtyrow input { flex: 1; min-width: 0; text-align: center; font-size: 20px; }
-  .qtyrow button { flex: 0 0 auto; white-space: nowrap; font-size: 18px; padding: 14px 16px; }
-  .minus { background: #c2410c; }
-  .plus { background: #157347; }
-  .verify { background: #7c3aed; }
-  .chk { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid #eef0f3; font-size: 16px; }
-  .chk .dot { width: 22px; text-align: center; font-size: 18px; }
-  .chk.done { color: #157347; }
-  .chk small { color: #8a8f98; margin-left: auto; white-space: nowrap; }
-  .sec { font-size: 13px; font-weight: 700; color: #6b7280; margin: 14px 0 4px; }
-  .warnbanner { background: #fff7ed; color: #9a3412; border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-weight: 700; font-size: 15px; }
-  .casehdr { background: #eef2ff; color: #3730a3; border-radius: 10px; padding: 10px 12px; font-weight: 700; }
+  #reader { margin-top: 14px; border-radius: 14px; overflow: hidden; }
+  .card {
+    margin-top:16px; background:var(--canvas); border:1px solid var(--hairline);
+    border-radius:18px; padding:20px; box-shadow:0 6px 22px rgba(74,21,75,.07);
+  }
+  .code { font-size:30px; font-weight:800; letter-spacing:-.6px; color:var(--primary); }
+  .db {
+    display:inline-block; font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase;
+    color:var(--on-primary); background:var(--primary); padding:4px 12px; border-radius:90px; margin-left:8px; vertical-align:middle;
+  }
+  .name { font-size:20px; font-weight:600; margin:10px 0 14px; }
+  .spec { display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--hairline); font-size:16px; }
+  .spec b { color:var(--ink-mute); font-weight:600; }
+  .stock { display:flex; gap:10px; margin-top:16px; }
+  .stock .box { flex:1; text-align:center; background:var(--cream); border-radius:14px; padding:14px 10px; }
+  .stock .num { font-size:28px; font-weight:800; color:var(--primary); }
+  .stock .lab { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-mute); margin-top:2px; }
+  .order { margin-top:12px; font-size:17px; font-weight:700; text-align:center; color:var(--error); }
+  .order.ok { color:var(--success); }
+  .err { margin-top:16px; background:#fbeae4; color:var(--error); border-radius:14px; padding:16px; font-size:16px; font-weight:600; }
+  .muted { color:var(--ink-mute); font-size:13px; line-height:1.5; margin-top:8px; }
+  .ok { color:var(--success); }
+  .done { background:#e2f2ec; color:var(--success); border-radius:14px; padding:12px 14px; font-size:16px; font-weight:800; text-align:center; margin-bottom:14px; }
+  .qtyrow { display:flex; gap:8px; margin-top:16px; align-items:stretch; }
+  .qtyrow input { flex:1; min-width:0; text-align:center; }
+  .qtyrow button { flex:0 0 auto; white-space:nowrap; padding:13px 20px; }
+  .minus { background:var(--canvas); color:var(--primary); box-shadow:inset 0 0 0 1.6px var(--primary); }
+  .plus { background:var(--lavender); color:var(--primary); }
+  .verify { background:var(--primary); }
+  .chk { display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--hairline); font-size:15px; }
+  .chk .dot { width:22px; text-align:center; font-size:18px; }
+  .chk.done { color:var(--success); }
+  .chk small { color:var(--ink-mute); margin-left:auto; white-space:nowrap; }
+  .sec { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--ink-mute); margin:16px 0 6px; }
+  .warnbanner { background:#fdf0e6; color:#9a3412; border-radius:12px; padding:10px 12px; margin-top:8px; font-weight:700; font-size:14px; }
+  .casehdr { background:var(--lavender); color:var(--primary); border-radius:12px; padding:11px 13px; font-weight:700; }
 </style>
 </head>
 <body>
@@ -57,8 +90,8 @@
       <button onclick="submitInput()">확인</button>
     </div>
     <div class="btns">
-      <button class="ghost" id="camBtn" onclick="toggleCam()">📷 카메라 스캔</button>
-      <button class="ghost" style="background:#e0f2fe;color:#075985" onclick="enterToolMode()">🔧 툴 교체</button>
+      <button id="camBtn" onclick="toggleCam()">📷 카메라 스캔</button>
+      <button class="ghost" onclick="enterToolMode()">🔧 툴 교체</button>
     </div>
     <div class="muted">재고코드(MF-1)=수량 / <b>케이스 QR 먼저 스캔=자재검수</b> / <b>툴 QR(TL-)=툴 교체</b>. 미개봉 디스크는 수축률 입력 후 🔓 개봉.</div>
   </div>
@@ -97,7 +130,7 @@
   function renderBoxPrompt() {
     document.getElementById('boxPanel').innerHTML =
       '<div class="card">' +
-        '<div class="done" style="background:#eef2ff;color:#3730a3">박스 ' + box3(BOX) + ' 인식됨</div>' +
+        '<div class="done" style="background:#f9f0ff;color:#4a154b">박스 ' + box3(BOX) + ' 인식됨</div>' +
         '<div style="font-size:19px;margin:8px 0 4px">📷 <b>의뢰서 QR</b>을 찍으세요</div>' +
         '<div class="muted">카메라가 자동으로 켜집니다. 안 켜지면 아래 버튼을 누르세요.</div>' +
         '<div class="btns" style="margin-top:10px">' +
@@ -233,7 +266,7 @@
         (isDiskUnopened ?
           '<div class="muted" style="margin-top:14px">🔓 디스크 개봉 — 장비 선택 + 수축률 입력 후 개봉(미개봉 −1, 사용블럭 자동생성)</div>' +
           '<div class="qtyrow">' +
-            '<select id="equip" style="flex:1;font-size:18px;padding:14px;border:2px solid #c9ced6;border-radius:12px;background:#fff">' +
+            '<select id="equip" style="flex:1;font-size:18px;padding:14px;border:1.5px solid #e6e6e6;border-radius:12px;background:#fff">' +
               '<option value="">장비 선택…</option>' +
               '<option value="시로나">시로나 (Si)</option>' +
               '<option value="아름 500L">아름 500L</option>' +
@@ -243,7 +276,7 @@
           '</div>' +
           '<div class="qtyrow">' +
             '<input id="shrink" placeholder="수축률 예: 1.2332" inputmode="decimal" style="flex:1;text-transform:none">' +
-            '<button class="plus" style="background:#7c3aed" onclick="doOpen()">🔓 개봉</button>' +
+            '<button class="verify" onclick="doOpen()">🔓 개봉</button>' +
           '</div>' : '') +
       '</div>';
   }
@@ -448,12 +481,12 @@
       detail = '<div class="spec"><b>스캔 블럭</b><span>' + r.block.code + ' (' + r.block.serial + ')</span></div>' +
         '<div class="spec"><b>블럭 쉐이드/두께</b><span>' + fmt(r.block.shade) + ' / ' + fmt(r.block.thick) + 'T</span></div>';
       (r.mills || []).forEach(function (m) {
-        detail += '<div class="spec" style="color:#b42318"><b>밀링행 요구</b><span>' + fmt(m.shade) + ' / ' + fmt(m.thick) + 'T</span></div>';
+        detail += '<div class="spec" style="color:#cc4117"><b>밀링행 요구</b><span>' + fmt(m.shade) + ' / ' + fmt(m.thick) + 'T</span></div>';
       });
     } else {
       detail = '<div class="spec"><b>스캔 환봉</b><span>' + r.scanned.code + '</span></div>';
       (r.diff || []).forEach(function (d) {
-        detail += '<div class="spec" style="color:#b42318"><b>' + d.k + '</b><span>케이스 ' + d.case + ' ≠ 실물 ' + d.real + '</span></div>';
+        detail += '<div class="spec" style="color:#cc4117"><b>' + d.k + '</b><span>케이스 ' + d.case + ' ≠ 실물 ' + d.real + '</span></div>';
       });
     }
     var btns =
@@ -495,7 +528,7 @@
   function renderToolPrompt() {
     document.getElementById('boxPanel').innerHTML =
       '<div class="card">' +
-        '<div class="done" style="background:#e0f2fe;color:#075985">🔧 툴 교체 모드</div>' +
+        '<div class="done" style="background:#efe3f3;color:#592466">🔧 툴 교체 모드</div>' +
         '<div style="font-size:19px;margin:8px 0 4px">📷 <b>툴 QR</b>을 스캔하세요</div>' +
         '<div class="muted">툴을 찍으면 “어느 장비에 교체?” 버튼이 나옵니다.</div>' +
         '<div class="btns" style="margin-top:10px">' +
@@ -518,13 +551,13 @@
     if (!r || !r.ok) { toolErr(r ? r.msg : '응답 없음'); return; }
     TOOL = { code: r.tool.code, name: r.tool.name, kind: r.tool.kind, equips: r.equips || [] };
     var btns = TOOL.equips.map(function (eq, idx) {
-      return '<button class="plus" style="background:#0ea5e9;width:100%;margin-top:8px" onclick="logTool(' + idx + ')">' + eq.name + '</button>';
+      return '<button class="verify" style="width:100%;margin-top:8px" onclick="logTool(' + idx + ')">' + eq.name + '</button>';
     }).join('');
     if (!TOOL.equips.length) btns = '<div class="muted">등록된 장비가 없습니다 — 장비 DB를 확인하세요.</div>';
     var hint = r.allEquip ? '<div class="muted">호환 장비 미지정 → 전체 장비 표시</div>' : '';
     document.getElementById('result').innerHTML =
       '<div class="card">' +
-        '<div><span class="code">' + TOOL.code + '</span><span class="db" style="background:#0ea5e9">툴</span></div>' +
+        '<div><span class="code">' + TOOL.code + '</span><span class="db" style="background:#4a154b">툴</span></div>' +
         '<div class="name">' + TOOL.name + (TOOL.kind ? ' · ' + TOOL.kind : '') + '</div>' +
         '<div class="sec">어느 장비에 교체했나요?</div>' + hint + btns +
         '<div class="btns" style="margin-top:14px">' +
@@ -550,7 +583,7 @@
         '<div class="done">✓ 기록 완료</div>' +
         '<div class="name" style="text-align:center">' + r.toolName + ' → ' + r.equipName + '</div>' +
         '<div class="btns" style="margin-top:14px">' +
-          '<button class="verify" style="background:#0ea5e9" onclick="toolRescan()">📷 다음 툴 교체</button>' +
+          '<button class="verify" style="background:#4a154b" onclick="toolRescan()">📷 다음 툴 교체</button>' +
           '<button class="ghost" onclick="exitTool()">✖ 종료</button>' +
         '</div>' +
       '</div>';
