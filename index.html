@@ -93,6 +93,9 @@
       <button id="camBtn" onclick="toggleCam()">📷 카메라 스캔</button>
       <button class="ghost" onclick="enterToolMode()">🔧 툴 교체</button>
     </div>
+    <div class="btns">
+      <button class="ghost" onclick="enterBatch()">📦 박스 연속배정 (여러 건)</button>
+    </div>
     <div class="muted">재고코드(MF-1)=수량 / <b>케이스 QR 먼저 스캔=자재검수</b> / <b>툴 QR(TL-)=툴 교체</b>. 미개봉 디스크는 수축률 입력 후 🔓 개봉.</div>
   </div>
 
@@ -106,6 +109,7 @@
   var GAS = 'https://script.google.com/macros/s/AKfycbyq7xJO7lGJXLNGrASOMQQ2sHmI2j7J6qANPcCSmiJkLpLY90heLTJLtXaChbUAmyO-/exec';
   var qr = null, camOn = false, lastCode = '';
   var BOX = null, scanMode = 'lookup', lastScan = '';
+  var batchQueue = [], batchBox = null, batchLast = '', batchLastT = 0;   // 박스 연속 배정
 
   function getParam(n) {
     var m = new RegExp('[?&]' + n + '=([^&#]+)').exec(location.search);
@@ -612,7 +616,107 @@
     stopCam();
   }
 
+  /* ===== 박스 연속 배정 (여러 건 모아서 한 번에) ===== */
+  function enterBatch() {
+    scanMode = 'batch'; batchQueue = []; batchBox = null; batchLast = '';
+    document.getElementById('title').textContent = '📦 박스 연속 배정';
+    document.getElementById('normalUI').style.display = 'none';
+    document.getElementById('result').innerHTML = '';
+    renderBatch('');
+    startCam();
+  }
+  function buzz() { try { if (navigator.vibrate) navigator.vibrate(50); } catch (e) {} }
+  function getBoxParam(s) { var m = /[?&]box=([^&#]+)/.exec(String(s)); return m ? decodeURIComponent(m[1]) : null; }
+
+  function batchScan(text) {
+    var now = Date.now();
+    if (text === batchLast && now - batchLastT < 2500) return;   // 같은 QR 연타 무시
+    batchLast = text; batchLastT = now;
+
+    var bx = getBoxParam(text);
+    if (bx !== null) { batchBox = bx; buzz(); renderBatch(''); return; }   // 박스 QR
+
+    if (batchBox === null) { renderBatch('⚠️ 먼저 박스 QR을 찍으세요'); return; }
+    if (batchQueue.some(function (q) { return q.code === text; })) { renderBatch('⚠️ 이미 목록에 있는 케이스입니다'); return; }
+
+    var thisBox = batchBox;
+    renderBatch('환자 확인 중…');
+    fetch(GAS + '?action=caseinfo&code=' + encodeURIComponent(text))
+      .then(function (r) { return r.json(); })
+      .then(function (info) {
+        if (!info || !info.ok) { renderBatch('⚠️ 케이스 조회 실패: ' + (info ? info.msg : '응답없음') + ' (박스 ' + box3(thisBox) + ' 유지)'); return; }
+        batchQueue.push({ box: thisBox, code: text, patient: info.patient || '케이스', clinic: info.clinic || '', count: info.count || 1 });
+        batchBox = null; buzz(); renderBatch('');
+      })
+      .catch(function () { renderBatch('⚠️ 통신오류 (박스 ' + box3(thisBox) + ' 유지)'); });
+  }
+
+  function renderBatch(status) {
+    var rows = batchQueue.map(function (it, idx) {
+      return '<div class="spec"><b>박스 ' + box3(it.box) + '</b><span>' + it.patient +
+        (it.clinic ? ' · ' + it.clinic : '') + (it.count > 1 ? ' (' + it.count + '건)' : '') +
+        ' &nbsp;<a onclick="batchRemove(' + idx + ')" style="color:var(--error);cursor:pointer;font-weight:800">✕</a></span></div>';
+    }).join('');
+    var head = (batchBox !== null)
+      ? '<div class="done" style="background:#eef2ff;color:#3730a3">박스 ' + box3(batchBox) + ' — 이제 <b>케이스 QR</b>을 찍으세요</div>'
+      : '<div class="done">📷 <b>박스 QR</b>을 찍으세요</div>';
+    document.getElementById('boxPanel').innerHTML =
+      '<div class="card">' + head +
+        (status ? '<div class="muted" style="margin-top:2px">' + status + '</div>' : '') +
+        '<div class="sec">대기목록 (' + batchQueue.length + '건)</div>' +
+        (rows || '<div class="muted">아직 없음 — 박스 → 케이스 순서로 스캔하세요</div>') +
+        '<div class="btns" style="margin-top:14px">' +
+          '<button class="verify" onclick="batchSubmit()"' + (batchQueue.length ? '' : ' disabled style="opacity:.5"') + '>✅ ' + batchQueue.length + '건 등록</button>' +
+          '<button class="ghost" onclick="exitBatch()">✖ 종료</button>' +
+        '</div>' +
+      '</div>';
+  }
+  function batchRemove(idx) { batchQueue.splice(idx, 1); renderBatch(''); }
+
+  function batchSubmit() {
+    if (!batchQueue.length) return;
+    var items = batchQueue.slice();
+    stopCam();
+    document.getElementById('boxPanel').innerHTML = '<div class="card"><div class="done">등록 중… ' + items.length + '건 (잠시만요)</div></div>';
+    Promise.all(items.map(function (it) {
+      return fetch(GAS + '?action=assignbox&box=' + encodeURIComponent(it.box) + '&code=' + encodeURIComponent(it.code))
+        .then(function (r) { return r.json(); })
+        .then(function (res) { return { it: it, res: res || { ok: false, msg: '응답없음' } }; })
+        .catch(function () { return { it: it, res: { ok: false, msg: '통신오류' } }; });
+    })).then(renderBatchResults);
+  }
+
+  function renderBatchResults(all) {
+    var ok = 0;
+    var rows = all.map(function (x) {
+      var r = x.res, good = !!(r && r.ok); if (good) ok++;
+      var mark = good ? '✓' : (r && r.conflict ? '⚠️ 충돌' : '❌');
+      var col = good ? 'var(--success)' : 'var(--error)';
+      var who = good ? ((r.info && r.info.patient) || x.it.patient || '') : (r ? r.msg : '');
+      return '<div class="spec"><b>박스 ' + box3(x.it.box) + '</b><span style="color:' + col + '">' + mark + ' ' + who + '</span></div>';
+    }).join('');
+    document.getElementById('boxPanel').innerHTML =
+      '<div class="card">' +
+        '<div class="done">등록 완료 · 성공 ' + ok + ' / ' + all.length + '</div>' + rows +
+        '<div class="btns" style="margin-top:14px">' +
+          '<button class="verify" onclick="enterBatch()">📦 계속 배정</button>' +
+          '<button class="ghost" onclick="exitBatch()">✖ 종료</button>' +
+        '</div>' +
+      '</div>';
+    batchQueue = []; batchBox = null;
+  }
+
+  function exitBatch() {
+    scanMode = 'lookup'; batchQueue = []; batchBox = null;
+    stopCam();
+    document.getElementById('boxPanel').innerHTML = '';
+    document.getElementById('result').innerHTML = '';
+    document.getElementById('normalUI').style.display = '';
+    document.getElementById('title').textContent = '📦 재고 QR — 수량 관리';
+  }
+
   function onScan(text) {
+    if (scanMode === 'batch') { batchScan(text); return; }   // 연속 배정 — 카메라 유지
     stopCam();
     if (scanMode === 'assign') { doAssign(text); }
     else { handleText(text); }
@@ -649,7 +753,7 @@
   function bdLoop() {
     if (!camOn || !bdDetector || !bdVideo) return;
     bdDetector.detect(bdVideo).then(function (codes) {
-      if (codes && codes.length) { onScan(codes[0].rawValue); return; }   // onScan이 stopCam 호출
+      if (codes && codes.length) onScan(codes[0].rawValue);   // 비배치=stopCam(camOn=false→루프정지) / 배치=유지
       if (camOn) requestAnimationFrame(bdLoop);
     }).catch(function () { if (camOn) requestAnimationFrame(bdLoop); });
   }
