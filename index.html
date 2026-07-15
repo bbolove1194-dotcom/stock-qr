@@ -139,6 +139,7 @@
         '<div class="muted">카메라가 자동으로 켜집니다. 안 켜지면 아래 버튼을 누르세요.</div>' +
         '<div class="btns" style="margin-top:10px">' +
           '<button class="ghost" onclick="startCam()">📷 카메라 켜기</button>' +
+          '<button class="ghost" onclick="enterBatch(BOX)">🔁 여러 건 연속배정</button>' +
         '</div>' +
       '</div>';
     document.getElementById('result').innerHTML = '';
@@ -617,13 +618,14 @@
   }
 
   /* ===== 박스 연속 배정 (여러 건 모아서 한 번에) ===== */
-  function enterBatch() {
-    scanMode = 'batch'; batchQueue = []; batchBox = null; batchLast = '';
+  function enterBatch(seedBox) {
+    scanMode = 'batch'; batchQueue = []; batchLast = '';
+    batchBox = (seedBox != null && seedBox !== '') ? seedBox : null;   // ?box=로 들어온 박스는 그대로 이어받음
     document.getElementById('title').textContent = '📦 박스 연속 배정';
     document.getElementById('normalUI').style.display = 'none';
     document.getElementById('result').innerHTML = '';
     renderBatch('');
-    startCam();
+    if (!camOn) startCam();
   }
   function buzz() { try { if (navigator.vibrate) navigator.vibrate(50); } catch (e) {} }
   function getBoxParam(s) { var m = /[?&]box=([^&#]+)/.exec(String(s)); return m ? decodeURIComponent(m[1]) : null; }
@@ -723,7 +725,7 @@
   }
   function setCamBtn(t) { var b = document.getElementById('camBtn'); if (b) b.textContent = t; }
 
-  var bdStream = null, bdVideo = null, bdDetector = null;
+  var bdStream = null, bdVideo = null, bdDetector = null, camTrack = null, torchOn = false;
 
   function startCam() {
     if (camOn) return;
@@ -734,21 +736,42 @@
   function startCamHtml5() {
     if (typeof Html5Qrcode === 'undefined') { alert('스캐너 로드 실패 — 입력창을 쓰세요.'); return; }
     qr = new Html5Qrcode('reader');
-    qr.start({ facingMode: 'environment' }, { fps: 10, qrbox: 220 }, onScan, function () {})
+    qr.start({ facingMode: 'environment' }, { fps: 15, qrbox: 260 }, onScan, function () {})
       .then(function () { camOn = true; setCamBtn('⏹ 스캔 중지'); })
       .catch(function (e) { alert('카메라를 열 수 없습니다: ' + e + '\n입력창으로 조회하세요.'); });
   }
   function startCamBD() {
     var reader = document.getElementById('reader');
-    reader.innerHTML = '<video id="bdvid" playsinline muted style="width:100%;border-radius:12px;background:#000"></video>';
+    reader.innerHTML = '<video id="bdvid" playsinline muted style="width:100%;border-radius:12px;background:#000"></video>' +
+      '<button type="button" onclick="toggleTorch()" class="ghost" style="width:100%;margin-top:6px">🔦 플래시(어두울 때)</button>';
     bdVideo = document.getElementById('bdvid');
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+    // 해상도 ↑(1920) = 빽빽한 QR도 선명 / 연속 자동초점 = 흐림 방지 → 인식률 개선
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
       .then(function (stream) {
         bdStream = stream; bdVideo.srcObject = stream; bdVideo.play();
+        applyFocus_(stream);
         bdDetector = new BarcodeDetector({ formats: ['qr_code', 'data_matrix', 'code_128', 'ean_13'] });
         camOn = true; setCamBtn('⏹ 스캔 중지'); bdLoop();
       })
       .catch(function () { startCamHtml5(); });   // 카메라 실패 시 폴백
+  }
+  function applyFocus_(stream) {
+    try {
+      camTrack = stream.getVideoTracks()[0];
+      var caps = (camTrack && camTrack.getCapabilities) ? camTrack.getCapabilities() : {};
+      var adv = [];
+      if (caps.focusMode && caps.focusMode.indexOf && caps.focusMode.indexOf('continuous') >= 0) adv.push({ focusMode: 'continuous' });
+      if (adv.length) camTrack.applyConstraints({ advanced: adv }).catch(function () {});
+    } catch (e) {}
+  }
+  function toggleTorch() {
+    try {
+      if (!camTrack) { alert('카메라가 켜진 뒤 눌러주세요.'); return; }
+      var caps = camTrack.getCapabilities ? camTrack.getCapabilities() : {};
+      if (!caps.torch) { alert('이 기기는 앱에서 플래시 제어를 지원하지 않아요.'); return; }
+      torchOn = !torchOn;
+      camTrack.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(function () {});
+    } catch (e) {}
   }
   function bdLoop() {
     if (!camOn || !bdDetector || !bdVideo) return;
@@ -762,6 +785,7 @@
     // camOn 가드: 이미 멈춘 상태에서 또 stop()하면 html5-qrcode가 깨져 카메라가 얼어붙음. 실제 정지는 한 번만.
     if (qr && camOn) { qr.stop().then(function(){ qr.clear(); }).catch(function(){}); }
     if (bdStream) { bdStream.getTracks().forEach(function (t) { t.stop(); }); bdStream = null; bdDetector = null; bdVideo = null; }
+    camTrack = null; torchOn = false;
     camOn = false; setCamBtn('📷 카메라 스캔');
   }
 </script>
