@@ -641,22 +641,15 @@
     if (batchBox === null) { renderBatch('⚠️ 먼저 박스 QR을 찍으세요'); return; }
     if (batchQueue.some(function (q) { return q.code === text; })) { renderBatch('⚠️ 이미 목록에 있는 케이스입니다'); return; }
 
-    var thisBox = batchBox;
-    renderBatch('환자 확인 중…');
-    fetch(GAS + '?action=caseinfo&code=' + encodeURIComponent(text))
-      .then(function (r) { return r.json(); })
-      .then(function (info) {
-        if (!info || !info.ok) { renderBatch('⚠️ 케이스 조회 실패: ' + (info ? info.msg : '응답없음') + ' (박스 ' + box3(thisBox) + ' 유지)'); return; }
-        batchQueue.push({ box: thisBox, code: text, patient: info.patient || '케이스', clinic: info.clinic || '', count: info.count || 1 });
-        batchBox = null; buzz(); renderBatch('');
-      })
-      .catch(function () { renderBatch('⚠️ 통신오류 (박스 ' + box3(thisBox) + ' 유지)'); });
+    // 노션 조회 없이 즉시 쌓기 (환자 확인·등록은 마지막에 "한 번에")
+    batchQueue.push({ box: batchBox, code: text });
+    batchBox = null; buzz(); renderBatch('');
   }
+  function getRecv_(s) { var m = /[?&]recv=([^&#]+)/.exec(String(s)); return m ? decodeURIComponent(m[1]) : ''; }
 
   function renderBatch(status) {
     var rows = batchQueue.map(function (it, idx) {
-      return '<div class="spec"><b>박스 ' + box3(it.box) + '</b><span>' + it.patient +
-        (it.clinic ? ' · ' + it.clinic : '') + (it.count > 1 ? ' (' + it.count + '건)' : '') +
+      return '<div class="spec"><b>박스 ' + box3(it.box) + '</b><span>케이스 담김' +
         ' &nbsp;<a onclick="batchRemove(' + idx + ')" style="color:var(--error);cursor:pointer;font-weight:800">✕</a></span></div>';
     }).join('');
     var head = (batchBox !== null)
@@ -679,27 +672,54 @@
     if (!batchQueue.length) return;
     var items = batchQueue.slice();
     stopCam();
-    document.getElementById('boxPanel').innerHTML = '<div class="card"><div class="done">등록 중… ' + items.length + '건 (잠시만요)</div></div>';
-    Promise.all(items.map(function (it) {
-      return fetch(GAS + '?action=assignbox&box=' + encodeURIComponent(it.box) + '&code=' + encodeURIComponent(it.code))
-        .then(function (r) { return r.json(); })
-        .then(function (res) { return { it: it, res: res || { ok: false, msg: '응답없음' } }; })
-        .catch(function () { return { it: it, res: { ok: false, msg: '통신오류' } }; });
-    })).then(renderBatchResults);
+    document.getElementById('boxPanel').innerHTML = '<div class="card"><div class="done">등록 중… ' + items.length + '건 (한 번에 조회·기록)</div></div>';
+
+    // 허브(recv) 항목 = 통합 등록(작업DB 직접, 쿼리 1번) / 노션주소(pageId) 항목 = 개별
+    var bulkPairs = [], directItems = [];
+    items.forEach(function (it) {
+      var recv = getRecv_(it.code);
+      if (recv) bulkPairs.push(it.box + ':' + recv);
+      else directItems.push(it);
+    });
+
+    var calls = [];
+    if (bulkPairs.length) {
+      calls.push(
+        fetch(GAS + '?action=assignboxbulk&pairs=' + encodeURIComponent(bulkPairs.join(';')))
+          .then(function (r) { return r.json(); })
+          .then(function (res) { return (res && res.results) ? res.results : [{ ok: false, msg: (res && res.msg) || '응답없음' }]; })
+          .catch(function () { return bulkPairs.map(function () { return { ok: false, msg: '통신오류' }; }); })
+      );
+    }
+    directItems.forEach(function (it) {
+      calls.push(
+        fetch(GAS + '?action=assignbox&box=' + encodeURIComponent(it.box) + '&code=' + encodeURIComponent(it.code))
+          .then(function (r) { return r.json(); })
+          .then(function (res) { return [{ box: it.box, ok: !!(res && res.ok), count: (res && res.count) || 1,
+            patient: (res && res.info && res.info.patient) || '', clinic: (res && res.info && res.info.clinic) || '', msg: (res && res.msg) || '' }]; })
+          .catch(function () { return [{ box: it.box, ok: false, msg: '통신오류' }]; })
+      );
+    });
+
+    Promise.all(calls).then(function (arrs) {
+      var results = [];
+      arrs.forEach(function (a) { results = results.concat(a); });
+      renderBatchResults(results);
+    });
   }
 
-  function renderBatchResults(all) {
+  function renderBatchResults(results) {
     var ok = 0;
-    var rows = all.map(function (x) {
-      var r = x.res, good = !!(r && r.ok); if (good) ok++;
-      var mark = good ? '✓' : (r && r.conflict ? '⚠️ 충돌' : '❌');
+    var rows = results.map(function (r) {
+      var good = !!(r && r.ok); if (good) ok++;
+      var mark = good ? '✓' : '❌';
       var col = good ? 'var(--success)' : 'var(--error)';
-      var who = good ? ((r.info && r.info.patient) || x.it.patient || '') : (r ? r.msg : '');
-      return '<div class="spec"><b>박스 ' + box3(x.it.box) + '</b><span style="color:' + col + '">' + mark + ' ' + who + '</span></div>';
+      var who = good ? ((r.patient || '케이스') + (r.clinic ? ' · ' + r.clinic : '') + (r.count > 1 ? ' (' + r.count + '건)' : '')) : (r.msg || '실패');
+      return '<div class="spec"><b>박스 ' + box3(r.box) + '</b><span style="color:' + col + '">' + mark + ' ' + who + '</span></div>';
     }).join('');
     document.getElementById('boxPanel').innerHTML =
       '<div class="card">' +
-        '<div class="done">등록 완료 · 성공 ' + ok + ' / ' + all.length + '</div>' + rows +
+        '<div class="done">등록 완료 · 성공 ' + ok + ' / ' + results.length + '</div>' + rows +
         '<div class="btns" style="margin-top:14px">' +
           '<button class="verify" onclick="enterBatch()">📦 계속 배정</button>' +
           '<button class="ghost" onclick="exitBatch()">✖ 종료</button>' +
@@ -742,7 +762,14 @@
   }
   function startCamBD() {
     var reader = document.getElementById('reader');
-    reader.innerHTML = '<video id="bdvid" playsinline muted style="width:100%;border-radius:12px;background:#000"></video>' +
+    // 조준 가이드: 이 네모 안에 QR을 맞추면 그것만 읽힘(옆 의뢰서 QR 오인식 방지)
+    reader.innerHTML =
+      '<div style="position:relative">' +
+        '<video id="bdvid" playsinline muted style="width:100%;border-radius:12px;background:#000;display:block"></video>' +
+        '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:56%;aspect-ratio:1;' +
+             'border:3px solid rgba(255,255,255,.9);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.28);pointer-events:none"></div>' +
+      '</div>' +
+      '<div class="muted" style="text-align:center;margin-top:4px">네모 안에 QR 하나만 맞추세요</div>' +
       '<button type="button" onclick="toggleTorch()" class="ghost" style="width:100%;margin-top:6px">🔦 플래시(어두울 때)</button>';
     bdVideo = document.getElementById('bdvid');
     // 해상도 ↑(1920) = 빽빽한 QR도 선명 / 연속 자동초점 = 흐림 방지 → 인식률 개선
@@ -776,9 +803,28 @@
   function bdLoop() {
     if (!camOn || !bdDetector || !bdVideo) return;
     bdDetector.detect(bdVideo).then(function (codes) {
-      if (codes && codes.length) onScan(codes[0].rawValue);   // 비배치=stopCam(camOn=false→루프정지) / 배치=유지
+      // 화면에 QR이 여러 개(의뢰서 여러 장) 잡힐 수 있음 → 중앙 조준칸에 가장 가까운 것만 채택.
+      var pick = pickCenterCode_(codes);
+      if (pick) onScan(pick.rawValue);   // 비배치=stopCam(camOn=false→루프정지) / 배치=유지
       if (camOn) requestAnimationFrame(bdLoop);
     }).catch(function () { if (camOn) requestAnimationFrame(bdLoop); });
+  }
+  /** 중앙에 가장 가까운 코드 1개 반환. 중앙에서 너무 먼 건 무시(옆 의뢰서 오인식 방지). */
+  function pickCenterCode_(codes) {
+    if (!codes || !codes.length) return null;
+    var vw = (bdVideo && bdVideo.videoWidth) || 1280;
+    var vh = (bdVideo && bdVideo.videoHeight) || 720;
+    var cx = vw / 2, cy = vh / 2, best = null, bestD = Infinity;
+    for (var i = 0; i < codes.length; i++) {
+      var b = codes[i].boundingBox;
+      var bx = b ? (b.x + b.width / 2) : cx;
+      var by = b ? (b.y + b.height / 2) : cy;
+      var d = (bx - cx) * (bx - cx) + (by - cy) * (by - cy);
+      if (d < bestD) { bestD = d; best = codes[i]; }
+    }
+    var lim = Math.min(vw, vh) * 0.34;          // 조준칸 반경 밖이면 버림
+    if (bestD > lim * lim) return null;
+    return best;
   }
   function toggleCam() { if (camOn) stopCam(); else startCam(); }
   function stopCam() {
